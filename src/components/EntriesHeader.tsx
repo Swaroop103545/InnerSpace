@@ -81,12 +81,16 @@ export interface EntriesTopBarProps {
   title?: string;
   onPressSort?: () => void;
   sortLabel?: string;
+  onPressSearch?: () => void;
+  isSearchActive?: boolean;
 }
 
 export const EntriesTopBar: React.FC<EntriesTopBarProps> = ({
   title = 'All Entries',
   onPressSort,
   sortLabel = 'Sort',
+  onPressSearch,
+  isSearchActive = false,
 }) => {
   return (
     <View style={styles.topBarContainer}>
@@ -95,15 +99,34 @@ export const EntriesTopBar: React.FC<EntriesTopBarProps> = ({
           <Text style={styles.titleText}>{title}</Text>
         </View>
 
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={onPressSort}
-          style={styles.sortButton}
-        >
-          <Ionicons name="swap-vertical" size={15} color="#2F2448" />
-          <Text style={styles.sortText}>{sortLabel}</Text>
-          <Ionicons name="chevron-down" size={13} color="#2F2448" />
-        </TouchableOpacity>
+        <View style={styles.topBarActions}>
+          {onPressSearch ? (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={onPressSearch}
+              style={[
+                styles.iconActionButton,
+                isSearchActive && styles.iconActionButtonActive,
+              ]}
+            >
+              <Ionicons
+                name="search"
+                size={16}
+                color={isSearchActive ? '#6E3DE6' : '#2F2448'}
+              />
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={onPressSort}
+            style={styles.sortButton}
+          >
+            <Ionicons name="swap-vertical" size={15} color="#2F2448" />
+            <Text style={styles.sortText}>{sortLabel}</Text>
+            <Ionicons name="chevron-down" size={13} color="#2F2448" />
+          </TouchableOpacity>
+        </View>
       </View>
     </View>
   );
@@ -180,6 +203,30 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#1C1335',
     letterSpacing: -0.3,
+  },
+  topBarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconActionButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E6E1EE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#1C1335',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  iconActionButtonActive: {
+    backgroundColor: '#F3ECFD',
+    borderColor: '#6E3DE6',
   },
   sortButton: {
     flexDirection: 'row',

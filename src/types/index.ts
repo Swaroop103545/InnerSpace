@@ -1,7 +1,7 @@
 import { ImageSourcePropType } from 'react-native';
 
 export interface PolaroidData {
-  image: ImageSourcePropType;
+  image: any;
   caption: string;
   tapeColor: string;
 }
@@ -24,6 +24,8 @@ export interface JournalEntry {
   tags?: string[];
   alignment?: 'left' | 'center' | 'right';
   fontFamily?: string;
+  isFavorite?: boolean;
+  timestamp?: number;
 }
 
 export interface JournalSection {
@@ -38,4 +40,7 @@ export interface DisplayedJournalSection extends JournalSection {
   isExpanded: boolean;
 }
 
-
+export interface Prompt {
+  category: string;
+  questions: string[];
+}

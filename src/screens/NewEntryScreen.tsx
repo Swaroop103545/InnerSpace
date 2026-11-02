@@ -17,10 +17,14 @@ import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 import { Caveat_600SemiBold } from '@expo-google-fonts/caveat';
 import { JournalEntry, PolaroidData } from '../types';
+import { useAppDispatch } from '../store/hooks';
+import { addEntry, updateEntry } from '../store/slices/journalSlice';
+import { closeNewEntryModal } from '../store/slices/uiSlice';
 
 export interface NewEntryScreenProps {
   onClose?: () => void;
   onSave?: (entry: JournalEntry) => void;
+  entryToEdit?: JournalEntry | null;
   initialDate?: Date;
   fontsLoaded?: boolean;
 }
@@ -128,9 +132,11 @@ const SAMPLE_POLAROIDS = [
 export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
   onClose,
   onSave,
+  entryToEdit,
   initialDate,
   fontsLoaded: passedFontsLoaded,
 }) => {
+  const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
   const [internalFontsLoaded] = useFonts({
     PlayfairDisplay_700Bold,
@@ -138,16 +144,52 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
   });
   const fontsLoaded = passedFontsLoaded ?? internalFontsLoaded;
 
-  const [entryDate] = useState<Date>(initialDate || new Date());
-  const [content, setContent] = useState<string>('');
-  const [selectedMood, setSelectedMood] = useState<string | null>(null);
-  const [selectedWeather, setSelectedWeather] = useState<string | null>(null);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [activeTheme, setActiveTheme] = useState(COLOR_THEMES[0]);
-  const [textAlignment, setTextAlignment] = useState<'left' | 'center' | 'right'>('left');
-  const [selectedFont, setSelectedFont] = useState<'system' | 'serif' | 'handwriting'>('system');
+  const isEditing = Boolean(entryToEdit);
+
+  const initialEntryDate = useMemo(() => {
+    if (entryToEdit?.timestamp) return new Date(entryToEdit.timestamp);
+    return initialDate || new Date();
+  }, [entryToEdit, initialDate]);
+
+  const [entryDate] = useState<Date>(initialEntryDate);
+
+  const initialContent = useMemo(() => {
+    if (!entryToEdit) return '';
+    if (entryToEdit.title && entryToEdit.body) {
+      if (entryToEdit.body.startsWith(entryToEdit.title)) {
+        return entryToEdit.body;
+      }
+      return `${entryToEdit.title}\n${entryToEdit.body}`;
+    }
+    return entryToEdit.body || entryToEdit.title || '';
+  }, [entryToEdit]);
+
+  const [content, setContent] = useState<string>(initialContent);
+  const [selectedMood, setSelectedMood] = useState<string | null>(entryToEdit?.mood || null);
+  const [selectedWeather, setSelectedWeather] = useState<string | null>(entryToEdit?.weather || null);
+  const [selectedTags, setSelectedTags] = useState<string[]>(entryToEdit?.tags || []);
+
+  const initialTheme = useMemo(() => {
+    if (!entryToEdit) return COLOR_THEMES[0];
+    return (
+      COLOR_THEMES.find(
+        (t) =>
+          t.backgroundColor.toLowerCase() === entryToEdit.backgroundColor.toLowerCase()
+      ) || COLOR_THEMES[0]
+    );
+  }, [entryToEdit]);
+
+  const [activeTheme, setActiveTheme] = useState(initialTheme);
+  const [textAlignment, setTextAlignment] = useState<'left' | 'center' | 'right'>(
+    entryToEdit?.alignment || 'left'
+  );
+  const [selectedFont, setSelectedFont] = useState<'system' | 'serif' | 'handwriting'>(
+    (entryToEdit?.fontFamily as any) || 'system'
+  );
   const [fontSizeLevel, setFontSizeLevel] = useState<'regular' | 'large' | 'title'>('regular');
-  const [selectedPolaroid, setSelectedPolaroid] = useState<PolaroidData | null>(null);
+  const [selectedPolaroid, setSelectedPolaroid] = useState<PolaroidData | null>(
+    entryToEdit?.polaroid || null
+  );
   const [isRecordingMemo, setIsRecordingMemo] = useState(false);
 
   // Active sheet modals
@@ -165,16 +207,28 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
   const charCount = content.length;
 
   const handleClose = () => {
-    if (content.trim().length > 0) {
+    const hasUnsaved = isEditing
+      ? content !== initialContent
+      : content.trim().length > 0;
+
+    if (hasUnsaved) {
       Alert.alert(
-        'Discard Entry?',
+        'Discard Changes?',
         'You have unsaved thoughts. Do you want to discard them?',
         [
           { text: 'Keep Writing', style: 'cancel' },
-          { text: 'Discard', style: 'destructive', onPress: () => onClose?.() },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () => {
+              dispatch(closeNewEntryModal());
+              onClose?.();
+            },
+          },
         ]
       );
     } else {
+      dispatch(closeNewEntryModal());
       onClose?.();
     }
   };
@@ -202,11 +256,15 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
 
     // Pick emoji from mood or weather if available
     const moodObj = AVAILABLE_MOODS.find((m) => m.id === selectedMood);
-    const titleEmoji = moodObj ? moodObj.emoji : undefined;
+    const titleEmoji = moodObj ? moodObj.emoji : (entryToEdit?.titleEmoji || undefined);
 
-    const newEntry: JournalEntry = {
-      id: `entry-${Date.now()}`,
-      date: fullDateStr,
+    const targetId = entryToEdit?.id || `entry-${Date.now()}`;
+    const targetTimestamp = entryToEdit?.timestamp || entryDate.getTime();
+
+    const resultEntry: JournalEntry = {
+      id: targetId,
+      date: entryToEdit?.date || fullDateStr,
+      timestamp: targetTimestamp,
       title: firstLine.length > 35 ? `${firstLine.substring(0, 32)}...` : firstLine,
       titleEmoji,
       body: restLines,
@@ -218,9 +276,20 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
       tags: selectedTags.length > 0 ? selectedTags : undefined,
       alignment: textAlignment,
       fontFamily: selectedFont,
+      isFavorite: entryToEdit?.isFavorite,
     };
 
-    onSave?.(newEntry);
+    if (onSave) {
+      onSave(resultEntry);
+    } else {
+      if (isEditing) {
+        dispatch(updateEntry(resultEntry));
+      } else {
+        dispatch(addEntry(resultEntry));
+      }
+      dispatch(closeNewEntryModal());
+      onClose?.();
+    }
   };
 
   const handleInsertTimestamp = () => {
@@ -280,7 +349,7 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
           onPress={handleSave}
           style={styles.saveButton}
         >
-          <Text style={styles.saveButtonText}>Save</Text>
+          <Text style={styles.saveButtonText}>{isEditing ? 'Update' : 'Save'}</Text>
         </TouchableOpacity>
       </View>
 
