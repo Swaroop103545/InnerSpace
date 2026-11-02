@@ -10,6 +10,7 @@ import {
   ScrollView,
   Modal,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
@@ -20,6 +21,7 @@ import { JournalEntry, PolaroidData } from '../types';
 import { useAppDispatch } from '../store/hooks';
 import { addEntry, updateEntry } from '../store/slices/journalSlice';
 import { closeNewEntryModal } from '../store/slices/uiSlice';
+import { rephraseText, REPHRASE_TONES, RephraseTone } from '../utils/rephrase';
 
 export interface NewEntryScreenProps {
   onClose?: () => void;
@@ -191,10 +193,15 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
     entryToEdit?.polaroid || null
   );
   const [isRecordingMemo, setIsRecordingMemo] = useState(false);
+  const [isRephrasing, setIsRephrasing] = useState(false);
+  const [selectedTone, setSelectedTone] = useState<RephraseTone>('reflective');
+  const [variantCounter, setVariantCounter] = useState(0);
+  const [undoHistory, setUndoHistory] = useState<string[]>([]);
+  const [showRephraseBanner, setShowRephraseBanner] = useState(false);
 
   // Active sheet modals
   const [activePicker, setActivePicker] = useState<
-    'mood' | 'weather' | 'tags' | 'font' | 'theme' | 'polaroid' | null
+    'mood' | 'weather' | 'tags' | 'font' | 'theme' | 'polaroid' | 'rephraseTone' | null
   >(null);
 
   const inputRef = useRef<any>(null);
@@ -230,6 +237,43 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
     } else {
       dispatch(closeNewEntryModal());
       onClose?.();
+    }
+  };
+
+  const handleRephrase = async (toneToUse: RephraseTone = selectedTone) => {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      Alert.alert(
+        'Nothing to Rephrase',
+        'Please write a few thoughts or a journal sentence first, then tap Rephrase.'
+      );
+      return;
+    }
+
+    try {
+      setIsRephrasing(true);
+      // Save current content to undo history
+      setUndoHistory((prev) => [...prev, content]);
+      const nextVariant = variantCounter + 1;
+      setVariantCounter(nextVariant);
+
+      const rephrased = await rephraseText(content, toneToUse, nextVariant);
+      setContent(rephrased);
+      setShowRephraseBanner(true);
+    } catch {
+      Alert.alert('Rephrase Failed', 'Could not rephrase the text at this moment.');
+    } finally {
+      setIsRephrasing(false);
+    }
+  };
+
+  const handleUndoRephrase = () => {
+    if (undoHistory.length === 0) return;
+    const previous = undoHistory[undoHistory.length - 1];
+    setUndoHistory((prev) => prev.slice(0, -1));
+    setContent(previous);
+    if (undoHistory.length <= 1) {
+      setShowRephraseBanner(false);
     }
   };
 
@@ -344,13 +388,36 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
           <Feather name="x" size={26} color="#222222" />
         </TouchableOpacity>
 
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={handleSave}
-          style={styles.saveButton}
-        >
-          <Text style={styles.saveButtonText}>{isEditing ? 'Update' : 'Save'}</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => handleRephrase()}
+            disabled={isRephrasing}
+            style={[
+              styles.rephraseButton,
+              isRephrasing && styles.rephraseButtonDisabled,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Rephrase text"
+          >
+            {isRephrasing ? (
+              <ActivityIndicator size="small" color="#24744E" />
+            ) : (
+              <MaterialCommunityIcons name="auto-fix" size={16} color="#24744E" />
+            )}
+            <Text style={styles.rephraseButtonText}>
+              {isRephrasing ? 'Rephrasing...' : 'Rephrase'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={handleSave}
+            style={styles.saveButton}
+          >
+            <Text style={styles.saveButtonText}>{isEditing ? 'Update' : 'Save'}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAvoidingView
@@ -371,6 +438,51 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
               <Text style={styles.yearMonthText}>{yearMonth}</Text>
             </View>
           </View>
+
+          {/* Rephrased Feedback Banner (if active) */}
+          {showRephraseBanner ? (
+            <View style={styles.rephraseBanner}>
+              <View style={styles.rephraseBannerLeft}>
+                <MaterialCommunityIcons name="creation" size={16} color="#2F855A" />
+                <Text style={styles.rephraseBannerTitle}>
+                  Rephrased ·{' '}
+                  <Text style={styles.rephraseBannerTone}>
+                    {REPHRASE_TONES.find((t) => t.id === selectedTone)?.name}
+                  </Text>
+                </Text>
+              </View>
+
+              <View style={styles.rephraseBannerActions}>
+                <TouchableOpacity
+                  onPress={() => setActivePicker('rephraseTone')}
+                  style={styles.rephraseBannerToneBtn}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.rephraseBannerToneBtnText}>Tone</Text>
+                  <Feather name="chevron-down" size={12} color="#2F855A" />
+                </TouchableOpacity>
+
+                {undoHistory.length > 0 ? (
+                  <TouchableOpacity
+                    onPress={handleUndoRephrase}
+                    style={styles.rephraseBannerUndoBtn}
+                    activeOpacity={0.7}
+                  >
+                    <MaterialCommunityIcons name="undo" size={13} color="#555555" />
+                    <Text style={styles.rephraseBannerUndoText}>Undo</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                <TouchableOpacity
+                  onPress={() => setShowRephraseBanner(false)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  activeOpacity={0.7}
+                >
+                  <Feather name="x" size={14} color="#777777" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           {/* Voice Memo Indicator (if toggled) */}
           {isRecordingMemo ? (
@@ -595,6 +707,26 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
               size={23}
               color="#333333"
             />
+          </TouchableOpacity>
+
+          {/* 7. Rephrase AI Tool */}
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => handleRephrase()}
+            disabled={isRephrasing}
+            style={styles.toolItem}
+            accessibilityRole="button"
+            accessibilityLabel="Rephrase text"
+          >
+            {isRephrasing ? (
+              <ActivityIndicator size="small" color="#45C49A" />
+            ) : (
+              <MaterialCommunityIcons
+                name="auto-fix"
+                size={23}
+                color="#333333"
+              />
+            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -905,6 +1037,61 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
                 </View>
               </View>
             ) : null}
+
+            {/* Rephrase Tone Picker */}
+            {activePicker === 'rephraseTone' ? (
+              <View>
+                <View style={styles.sheetHeaderRow}>
+                  <Text style={styles.sheetTitle}>Rephrase Style & Tone</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      handleRephrase(selectedTone);
+                      setActivePicker(null);
+                    }}
+                  >
+                    <Text style={styles.sheetApplyText}>Rephrase</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.toneOptionsList}>
+                  {REPHRASE_TONES.map((tone) => {
+                    const isSelected = selectedTone === tone.id;
+                    return (
+                      <TouchableOpacity
+                        key={tone.id}
+                        activeOpacity={0.75}
+                        onPress={() => {
+                          setSelectedTone(tone.id);
+                          handleRephrase(tone.id);
+                          setActivePicker(null);
+                        }}
+                        style={[
+                          styles.toneOptionCard,
+                          isSelected ? styles.toneOptionCardSelected : null,
+                        ]}
+                      >
+                        <Text style={styles.toneEmoji}>{tone.emoji}</Text>
+                        <View style={styles.toneTextColumn}>
+                          <Text
+                            style={[
+                              styles.toneName,
+                              isSelected ? styles.toneNameSelected : null,
+                            ]}
+                          >
+                            {tone.name}
+                          </Text>
+                          <Text style={styles.toneDescription}>
+                            {tone.description}
+                          </Text>
+                        </View>
+                        {isSelected ? (
+                          <Feather name="check" size={18} color="#2F855A" />
+                        ) : null}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
@@ -929,6 +1116,31 @@ const styles = StyleSheet.create({
     padding: 6,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  rephraseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#EDF8F3',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: '#C5EAD9',
+  },
+  rephraseButtonDisabled: {
+    opacity: 0.65,
+  },
+  rephraseButtonText: {
+    color: '#24744E',
+    fontSize: 14,
+    fontWeight: '600',
+    letterSpacing: -0.1,
   },
   saveButton: {
     backgroundColor: '#4ECB9A',
@@ -1310,5 +1522,108 @@ const styles = StyleSheet.create({
   polaroidOptionSub: {
     fontSize: 12,
     color: '#777',
+  },
+  rephraseBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#F0FAF4',
+    borderWidth: 1,
+    borderColor: '#D2F2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 12,
+    marginBottom: 14,
+  },
+  rephraseBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  rephraseBannerTitle: {
+    fontSize: 13,
+    color: '#333333',
+    fontWeight: '500',
+  },
+  rephraseBannerTone: {
+    color: '#2F855A',
+    fontWeight: '700',
+  },
+  rephraseBannerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  rephraseBannerToneBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#E2F7EC',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+  },
+  rephraseBannerToneBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#2F855A',
+  },
+  rephraseBannerUndoBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#E2DFE6',
+  },
+  rephraseBannerUndoText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#555555',
+  },
+  sheetApplyText: {
+    fontSize: 14.5,
+    color: '#2F855A',
+    fontWeight: '700',
+  },
+  toneOptionsList: {
+    gap: 10,
+    marginTop: 8,
+  },
+  toneOptionCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F7FA',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    gap: 12,
+  },
+  toneOptionCardSelected: {
+    backgroundColor: '#EDFAF2',
+    borderWidth: 1.5,
+    borderColor: '#45C49A',
+  },
+  toneEmoji: {
+    fontSize: 22,
+  },
+  toneTextColumn: {
+    flex: 1,
+  },
+  toneName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#222222',
+  },
+  toneNameSelected: {
+    color: '#157351',
+  },
+  toneDescription: {
+    fontSize: 12,
+    color: '#777777',
+    marginTop: 2,
   },
 });
