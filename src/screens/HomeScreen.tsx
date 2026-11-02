@@ -22,6 +22,7 @@ import { Caveat_600SemiBold } from '@expo-google-fonts/caveat';
 import { Header } from '../components/Header';
 import { EntriesTopBar, MonthSectionHeader } from '../components/EntriesHeader';
 import { JournalCard } from '../components/JournalCard';
+import { CardDetailModal } from '../components/CardDetailModal';
 import { BottomNavBar, TabType } from '../components/BottomNavBar';
 import { JournalEntry, DisplayedJournalSection } from '../types';
 import { NewEntryScreen } from './NewEntryScreen';
@@ -54,10 +55,12 @@ import {
   openNewEntryModal,
   openEditEntryModal,
   closeNewEntryModal,
+  setSelectedEntryDetail,
   toggleSearchBar,
   selectActiveTab,
   selectIsNewEntryOpen,
   selectEditingEntry,
+  selectSelectedEntryDetail,
   selectIsSearchBarVisible,
 } from '../store/slices/uiSlice';
 import {
@@ -92,6 +95,18 @@ export const HomeScreen: React.FC = () => {
   const activeTab = useAppSelector(selectActiveTab);
   const isNewEntryOpen = useAppSelector(selectIsNewEntryOpen);
   const editingEntry = useAppSelector(selectEditingEntry);
+  const selectedEntryDetail = useAppSelector(selectSelectedEntryDetail);
+  const sections = useAppSelector((state) => state.journal.sections);
+
+  // Live reference to ensure modal reflects any instant updates/deletions
+  const liveViewingEntry = React.useMemo(() => {
+    if (!selectedEntryDetail) return null;
+    for (const section of sections) {
+      const found = section.data.find((e) => e.id === selectedEntryDetail.id);
+      if (found) return found;
+    }
+    return selectedEntryDetail;
+  }, [sections, selectedEntryDetail]);
   const isSearchBarVisible = useAppSelector(selectIsSearchBarVisible);
   const userName = useAppSelector(selectUserName);
   const userSubtitle = useAppSelector(selectUserSubtitle);
@@ -109,7 +124,13 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  // Single click: open the card completely with full text & details inside
   const handleCardPress = (entry: JournalEntry) => {
+    dispatch(setSelectedEntryDetail(entry));
+  };
+
+  // Long press: display existing entry action options (Favorite, Edit, Delete)
+  const handleCardLongPress = (entry: JournalEntry) => {
     Alert.alert(
       entry.title || 'Journal Entry',
       'Choose an action for this entry:',
@@ -514,6 +535,7 @@ export const HomeScreen: React.FC = () => {
                   entry={item}
                   fontsLoaded={fontsLoaded}
                   onPress={() => handleCardPress(item)}
+                  onLongPress={() => handleCardLongPress(item)}
                 />
               </View>
             )}
@@ -701,6 +723,42 @@ export const HomeScreen: React.FC = () => {
             fontsLoaded={fontsLoaded}
           />
         </Modal>
+
+        {/* Full Card Detail Modal triggered by clicking/tapping any card */}
+        <CardDetailModal
+          entry={liveViewingEntry}
+          visible={Boolean(selectedEntryDetail)}
+          onClose={() => {
+            dispatch(setSelectedEntryDetail(null));
+          }}
+          onToggleFavorite={(entry) => {
+            animateNext();
+            dispatch(toggleFavoriteEntry(entry.id));
+          }}
+          onEdit={(entry) => {
+            dispatch(setSelectedEntryDetail(null));
+            dispatch(openEditEntryModal(entry));
+          }}
+          onDelete={(entry) => {
+            Alert.alert(
+              'Delete Entry?',
+              'Are you sure you want to permanently delete this memory?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete',
+                  style: 'destructive',
+                  onPress: () => {
+                    animateNext();
+                    dispatch(deleteEntry({ id: entry.id }));
+                    dispatch(setSelectedEntryDetail(null));
+                  },
+                },
+              ]
+            );
+          }}
+          fontsLoaded={fontsLoaded}
+        />
       </View>
     </SafeAreaView>
   );
