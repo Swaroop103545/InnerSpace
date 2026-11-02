@@ -1,17 +1,20 @@
 import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { JournalEntry } from '../types';
 import { Polaroid } from './Polaroid';
 
 interface JournalCardProps {
   entry: JournalEntry;
   onPress?: () => void;
+  onLongPress?: () => void;
   fontsLoaded?: boolean;
 }
 
 export const JournalCard: React.FC<JournalCardProps> = ({
   entry,
   onPress,
+  onLongPress,
   fontsLoaded = false,
 }) => {
   const {
@@ -23,20 +26,32 @@ export const JournalCard: React.FC<JournalCardProps> = ({
     textColors,
     polaroid,
     tags,
+    isFavorite,
   } = entry;
 
   return (
     <TouchableOpacity
       activeOpacity={0.92}
       onPress={onPress}
+      onLongPress={onLongPress}
       style={[styles.card, { backgroundColor }]}
     >
       <View style={styles.cardContent}>
         <View style={polaroid ? styles.leftColumn : styles.fullColumn}>
-          {/* Date Label */}
-          <Text style={[styles.dateText, { color: textColors.date }]}>
-            {date}
-          </Text>
+          {/* Date Label with optional Favorite star */}
+          <View style={styles.dateRow}>
+            <Text style={[styles.dateText, { color: textColors.date }]}>
+              {date}
+            </Text>
+            {isFavorite ? (
+              <Ionicons
+                name="star"
+                size={13}
+                color={textColors.date}
+                style={styles.starIcon}
+              />
+            ) : null}
+          </View>
 
           {/* Title Row */}
           {/* <View style={styles.titleRow}>
@@ -127,12 +142,20 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     justifyContent: 'center',
   },
+  dateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 6,
+    gap: 6,
+  },
   dateText: {
     fontSize: 11.5,
     fontWeight: '800',
     letterSpacing: 0.7,
-    marginBottom: 6,
     textTransform: 'uppercase',
+  },
+  starIcon: {
+    marginBottom: 1,
   },
   titleRow: {
     flexDirection: 'row',
