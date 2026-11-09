@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -17,13 +17,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
-import { Caveat_600SemiBold } from '@expo-google-fonts/caveat';
 
 import { Header } from '../components/Header';
-import { EntriesTopBar, MonthSectionHeader } from '../components/EntriesHeader';
+import { MonthSectionHeader } from '../components/EntriesHeader';
 import { JournalCard } from '../components/JournalCard';
 import { CardDetailModal } from '../components/CardDetailModal';
-import { BottomNavBar, TabType } from '../components/BottomNavBar';
+import { BottomNavBar } from '../components/BottomNavBar';
 import { JournalEntry, DisplayedJournalSection } from '../types';
 import { NewEntryScreen } from './NewEntryScreen';
 
@@ -69,6 +68,8 @@ import {
   selectUserSubtitle,
   selectUserStreakDays,
 } from '../store/slices/userSlice';
+import UsersRender from '@/components/users';
+import CalendarScreen from './CalendarScreen';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -81,6 +82,44 @@ const QUICK_MOOD_FILTERS = [
   { id: 'inspired', emoji: '✨', label: 'Inspired' },
   { id: 'grateful', emoji: '🙏', label: 'Grateful' },
 ];
+
+const PASTEL_PALETTES = [
+  {
+    bg: '#EBF4FF',      // Soft Pastel Blue
+    badgeBg: '#DBEAFE',
+    badgeText: '#1E40AF',
+    textPrimary: '#1E293B',
+    textSecondary: '#64748B',
+  },
+  {
+    bg: '#FEE2E2',      // Soft Pastel Coral / Rose
+    badgeBg: '#FCA5A5',
+    badgeText: '#991B1B',
+    textPrimary: '#450A0A',
+    textSecondary: '#7F1D1D',
+  },
+  {
+    bg: '#F3E8FF',      // Soft Pastel Lavender
+    badgeBg: '#E9D5FF',
+    badgeText: '#6B21A8',
+    textPrimary: '#3B0764',
+    textSecondary: '#6B21A8',
+  },
+  {
+    bg: '#FEF3C7',      // Soft Pastel Mint / Cream
+    badgeBg: '#FDE68A',
+    badgeText: '#92400E',
+    textPrimary: '#451A03',
+    textSecondary: '#78350F',
+  },
+];
+  
+const users = [
+    { id: '1', name: 'Swaroop', relation: 'Brother', mentions: '10 mentions' },
+    { id: '2', name: 'Aditya', relation: 'Friend', mentions: '15 mentions' },
+    { id: '1', name: 'Swaroop', relation: 'Brother', mentions: '10 mentions' },
+    { id: '2', name: 'Aditya', relation: 'Friend', mentions: '15 mentions' },
+  ];
 
 export const HomeScreen: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -97,6 +136,7 @@ export const HomeScreen: React.FC = () => {
   const editingEntry = useAppSelector(selectEditingEntry);
   const selectedEntryDetail = useAppSelector(selectSelectedEntryDetail);
   const sections = useAppSelector((state) => state.journal.sections);
+  const [entries, setEntries] = useState();
 
   // Live reference to ensure modal reflects any instant updates/deletions
   const liveViewingEntry = React.useMemo(() => {
@@ -115,7 +155,6 @@ export const HomeScreen: React.FC = () => {
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplay_700Bold,
-    Caveat_600SemiBold,
   });
 
   const animateNext = () => {
@@ -207,103 +246,58 @@ export const HomeScreen: React.FC = () => {
     0
   );
 
-  // Render Analytics Tab
-  const renderAnalyticsView = () => (
+  // Users Tab
+  const renderUsersview = () => (
     <ScrollView
       style={styles.tabContentScroll}
       contentContainerStyle={styles.tabContentContainer}
       showsVerticalScrollIndicator={false}
     >
       <View style={styles.tabHeader}>
-        <Text
-          style={[
-            styles.tabTitle,
-            fontsLoaded ? { fontFamily: 'PlayfairDisplay_700Bold' } : null,
-          ]}
-        >
-          Journal Insights
-        </Text>
-        <Text style={styles.tabSubtitle}>
-          A glance at your inner journey & reflections
-        </Text>
-      </View>
+        <Header />
 
-      {/* Metric Cards Grid */}
-      <View style={styles.metricsGrid}>
-        <View style={[styles.metricCard, { backgroundColor: '#F0EAFB' }]}>
-          <Feather name="book-open" size={24} color="#6E3DE6" />
-          <Text style={styles.metricValue}>{stats.totalEntries}</Text>
-          <Text style={styles.metricLabel}>Total Entries</Text>
+        <View>
+          <TextInput
+            placeholder="Search User..."
+            placeholderTextColor="#9AA0A6"
+            style={styles.usersSearchInput}
+          />
         </View>
 
-        <View style={[styles.metricCard, { backgroundColor: '#FFF0F5' }]}>
-          <MaterialCommunityIcons name="image-multiple-outline" size={26} color="#E56338" />
-          <Text style={styles.metricValue}>{stats.totalPolaroids}</Text>
-          <Text style={styles.metricLabel}>Polaroid Photos</Text>
-        </View>
+        <View style={styles.cardsRow}>
+        {users.map((item, index) => {
+          const isOdd = index % 2 !== 0;
+          const theme = PASTEL_PALETTES[index % PASTEL_PALETTES.length];
 
-        <View style={[styles.metricCard, { backgroundColor: '#E8F8F0' }]}>
-          <Feather name="zap" size={24} color="#2AB565" />
-          <Text style={styles.metricValue}>{userStreakDays} Days</Text>
-          <Text style={styles.metricLabel}>Active Streak</Text>
-        </View>
+          return (
+            <View
+              key={item.id}
+              style={[
+                styles.cardWrapper,
+                isOdd ? styles.offsetDown : styles.offsetUp,
+              ]}
+            >
+              <View style={[styles.card, { backgroundColor: theme.bg }]}>
+                <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
+                  {item.name}
+                </Text>
+                
+                <Text style={[styles.cardRelation, { color: theme.textSecondary }]}>
+                  {item.relation}
+                </Text>
 
-        <View style={[styles.metricCard, { backgroundColor: '#FEF3D6' }]}>
-          <Feather name="edit-3" size={24} color="#D97706" />
-          <Text style={styles.metricValue}>{stats.totalCharacters}</Text>
-          <Text style={styles.metricLabel}>Words & Chars</Text>
-        </View>
-      </View>
-
-      {/* Mood Breakdown */}
-      <View style={styles.sectionBlock}>
-        <Text style={styles.sectionBlockTitle}>Mood Frequency</Text>
-        <View style={styles.moodPillsWrap}>
-          {Object.entries(stats.moodCounts).length === 0 ? (
-            <Text style={styles.emptyNote}>No moods tracked yet.</Text>
-          ) : (
-            Object.entries(stats.moodCounts).map(([mood, count]) => {
-              const moodInfo = QUICK_MOOD_FILTERS.find((m) => m.id === mood);
-              return (
-                <View key={mood} style={styles.moodCountChip}>
-                  <Text style={styles.moodChipEmoji}>{moodInfo?.emoji || '💭'}</Text>
-                  <Text style={styles.moodChipLabel}>
-                    {moodInfo?.label || mood}:
+                <View style={[styles.badge, { backgroundColor: theme.badgeBg }]}>
+                  <Text style={[styles.badgeText, { color: theme.badgeText }]}>
+                    {item.mentions}
                   </Text>
-                  <Text style={styles.moodChipCount}>{count}</Text>
-                </View>
-              );
-            })
-          )}
-        </View>
-      </View>
-
-      {/* Tags Breakdown */}
-      <View style={styles.sectionBlock}>
-        <Text style={styles.sectionBlockTitle}>Top Tags</Text>
-        <View style={styles.tagsPillsWrap}>
-          {Object.entries(stats.tagCounts).length === 0 ? (
-            <Text style={styles.emptyNote}>No tags added yet.</Text>
-          ) : (
-            Object.entries(stats.tagCounts).map(([tag, count]) => (
-              <View key={tag} style={styles.tagCountChip}>
-                <Text style={styles.tagCountText}>#{tag}</Text>
-                <View style={styles.tagBadge}>
-                  <Text style={styles.tagBadgeText}>{count}</Text>
                 </View>
               </View>
-            ))
-          )}
-        </View>
+            </View>
+          );
+        })}
       </View>
 
-      <TouchableOpacity
-        style={styles.backButton}
-        activeOpacity={0.8}
-        onPress={() => dispatch(setActiveTab('home'))}
-      >
-        <Text style={styles.backButtonText}>Back to Journal</Text>
-      </TouchableOpacity>
+      </View>
     </ScrollView>
   );
 
@@ -451,16 +445,16 @@ export const HomeScreen: React.FC = () => {
           onPress={() => {
             Alert.prompt
               ? Alert.prompt(
-                  'Edit Name',
-                  'Enter your preferred name:',
-                  (text) => {
-                    if (text && text.trim()) {
-                      dispatch(updateProfile({ name: text.trim() }));
-                    }
-                  },
-                  'plain-text',
-                  userName
-                )
+                'Edit Name',
+                'Enter your preferred name:',
+                (text) => {
+                  if (text && text.trim()) {
+                    dispatch(updateProfile({ name: text.trim() }));
+                  }
+                },
+                'plain-text',
+                userName
+              )
               : Alert.alert('Profile', `Currently journaling as ${userName}`);
           }}
         >
@@ -519,8 +513,19 @@ export const HomeScreen: React.FC = () => {
 
       <View style={styles.container}>
         {/* Render Active View based on activeTab */}
-        {activeTab === 'analytics' && renderAnalyticsView()}
-        {activeTab === 'calendar' && renderCalendarView()}
+        {/* {activeTab === 'users' && renderAnalyticsView()} */}
+        {activeTab === 'users' && <UsersRender />}
+        {activeTab === 'calendar' && 
+          <CalendarScreen 
+            entries={entries}
+            onOpenEntry={(entry) => {
+    // Connect this to your existing journal entry edit/open flow.
+            setEntryToEdit(entry);
+            dispatch(setActiveTab('home'));
+    // Open your existing New Entry / Edit Entry modal here.
+  }}
+
+          />}
         {activeTab === 'profile' && renderProfileView()}
 
         {/* Default Home Journal Feed */}
@@ -549,38 +554,131 @@ export const HomeScreen: React.FC = () => {
               />
             )}
             ListHeaderComponent={
-              <View>
-                {/* Header with Greeting & Avatar */}
-                <Header
-                  name={userName}
-                  subtitle={userSubtitle}
-                  avatarUri={require('../../assets/emma-profile.jpg')}
-                  fontsLoaded={fontsLoaded}
-                  onPressAvatar={() => dispatch(setActiveTab('profile'))}
-                />
+              <View style={styles.dashboardHeader}>
+                {/* Premium workspace header */}
+                <View style={styles.dashboardTopRow}>
+                  <View style={styles.dashboardBrand}>
+                    <View style={styles.dashboardBrandMark}>
+                      <MaterialCommunityIcons name="book-heart-outline" size={19} color="#FFFFFF" />
+                    </View>
+                    <View>
+                      <Text style={styles.dashboardBrandName}>INNERSPACE</Text>
+                      <Text style={styles.dashboardBrandCaption}>YOUR PERSONAL JOURNAL</Text>
+                    </View>
+                  </View>
 
-                {/* All Entries Top Bar with Sort & Search Trigger */}
-                <EntriesTopBar
-                  title="All Entries"
-                  onPressSort={handleSortPress}
-                  sortLabel={sortDescending ? 'Newest' : 'Oldest'}
-                  onPressSearch={() => {
-                    animateNext();
-                    dispatch(toggleSearchBar());
-                  }}
-                  isSearchActive={isSearchBarVisible || hasActiveFilters}
-                />
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={() => dispatch(setActiveTab('profile'))}
+                    style={styles.dashboardAvatarButton}
+                    accessibilityRole="button"
+                    accessibilityLabel="Open profile"
+                  >
+                    <Text style={styles.dashboardAvatarText}>
+                      {userName ? userName.charAt(0).toUpperCase() : 'E'}
+                    </Text>
+                    <View style={styles.dashboardOnlineDot} />
+                  </TouchableOpacity>
+                </View>
 
-                {/* Search & Filter Expandable Box */}
+                {/* Welcome panel */}
+                <View style={styles.dashboardWelcome}>
+                  <View style={styles.dashboardWelcomeCopy}>
+                    <Text style={styles.dashboardEyebrow}>YOUR SPACE, YOUR STORY</Text>
+                    <Text style={styles.dashboardGreeting}>
+                      Welcome back, {userName || 'there'}.
+                    </Text>
+                    <Text style={styles.dashboardSubtitle}>
+                      {userSubtitle || 'A little time for yourself goes a long way.'}
+                    </Text>
+                  </View>
+                  <View style={styles.dashboardStreak}>
+                    <Feather name="zap" size={15} color="#B7791F" />
+                    <Text style={styles.dashboardStreakValue}>{userStreakDays}</Text>
+                    <Text style={styles.dashboardStreakLabel}>DAY STREAK</Text>
+                  </View>
+                </View>
+
+                {/* Activity overview */}
+                <View style={styles.dashboardMetrics}>
+                  <View style={styles.dashboardMetric}>
+                    <Text style={styles.dashboardMetricValue}>{stats.totalEntries}</Text>
+                    <Text style={styles.dashboardMetricLabel}>ENTRIES</Text>
+                  </View>
+                  <View style={styles.dashboardMetricDivider} />
+                  <View style={styles.dashboardMetric}>
+                    <Text style={styles.dashboardMetricValue}>{stats.totalSections}</Text>
+                    <Text style={styles.dashboardMetricLabel}>MONTHS</Text>
+                  </View>
+                  <View style={styles.dashboardMetricDivider} />
+                  <View style={styles.dashboardMetric}>
+                    <Text style={styles.dashboardMetricValue}>{stats.totalPolaroids}</Text>
+                    <Text style={styles.dashboardMetricLabel}>MOMENTS</Text>
+                  </View>
+                </View>
+
+                {/* Primary action */}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  onPress={handleAddPress}
+                  style={styles.dashboardComposeButton}
+                >
+                  <View style={styles.dashboardComposeIcon}>
+                    <Feather name="edit-3" size={17} color="#FFFFFF" />
+                  </View>
+                  <View style={styles.dashboardComposeCopy}>
+                    <Text style={styles.dashboardComposeTitle}>Capture a moment</Text>
+                    <Text style={styles.dashboardComposeSubtitle}>Write down what's on your mind</Text>
+                  </View>
+                  <Feather name="arrow-up-right" size={19} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {/* Journal feed toolbar */}
+                <View style={styles.dashboardFeedHeader}>
+                  <View>
+                    <Text style={styles.dashboardFeedEyebrow}>YOUR COLLECTION</Text>
+                    <Text style={styles.dashboardFeedTitle}>Journal entries</Text>
+                    <Text style={styles.dashboardFeedSubtitle}>
+                      {totalMatchingEntries} {totalMatchingEntries === 1 ? 'entry' : 'entries'} in your journal
+                    </Text>
+                  </View>
+                  <View style={styles.dashboardFeedActions}>
+                    <TouchableOpacity
+                      onPress={handleSortPress}
+                      activeOpacity={0.7}
+                      style={styles.dashboardIconButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Sort entries, currently ${sortDescending ? 'newest first' : 'oldest first'}`}
+                    >
+                      <Feather name="arrow-down-up" size={17} color="#344054" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      onPress={() => {
+                        animateNext();
+                        dispatch(toggleSearchBar());
+                      }}
+                      activeOpacity={0.7}
+                      style={[
+                        styles.dashboardIconButton,
+                        (isSearchBarVisible || hasActiveFilters) && styles.dashboardIconButtonActive,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel="Search and filter entries"
+                    >
+                      <Feather name="search" size={17} color="#344054" />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Search and filters */}
                 {isSearchBarVisible || hasActiveFilters ? (
-                  <View style={styles.searchFilterContainer}>
-                    {/* Search Input Field */}
-                    <View style={styles.searchInputRow}>
-                      <Ionicons name="search" size={17} color="#79718A" style={styles.searchIcon} />
+                  <View style={styles.dashboardFilterPanel}>
+                    <View style={styles.dashboardSearchField}>
+                      <Feather name="search" size={16} color="#98A2B3" />
                       <TextInput
-                        style={styles.searchInput}
+                        style={styles.dashboardSearchInput}
                         placeholder="Search thoughts, memories, tags..."
-                        placeholderTextColor="#A098AE"
+                        placeholderTextColor="#98A2B3"
                         value={searchQuery}
                         onChangeText={(text) => dispatch(setSearchQuery(text))}
                         returnKeyType="search"
@@ -591,55 +689,46 @@ export const HomeScreen: React.FC = () => {
                           onPress={() => dispatch(setSearchQuery(''))}
                           style={styles.clearSearchIcon}
                         >
-                          <Ionicons name="close-circle" size={18} color="#79718A" />
+                          <Feather name="x-circle" size={17} color="#98A2B3" />
                         </TouchableOpacity>
                       )}
                     </View>
 
-                    {/* Quick Mood Filter Chips */}
-                    <View style={styles.filterMoodsRow}>
-                      <Text style={styles.filterSectionTitle}>Filter Mood:</Text>
-                      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                        <View style={styles.moodChipsList}>
-                          {QUICK_MOOD_FILTERS.map((m) => {
-                            const isSelected = selectedMoodFilter === m.id;
-                            return (
-                              <TouchableOpacity
-                                key={m.id}
-                                activeOpacity={0.75}
-                                onPress={() => {
-                                  animateNext();
-                                  dispatch(
-                                    setSelectedMoodFilter(isSelected ? null : m.id)
-                                  );
-                                }}
-                                style={[
-                                  styles.quickMoodChip,
-                                  isSelected && styles.quickMoodChipSelected,
-                                ]}
-                              >
-                                <Text style={styles.quickMoodEmoji}>{m.emoji}</Text>
-                                <Text
-                                  style={[
-                                    styles.quickMoodText,
-                                    isSelected && styles.quickMoodTextSelected,
-                                  ]}
-                                >
-                                  {m.label}
-                                </Text>
-                              </TouchableOpacity>
-                            );
-                          })}
-                        </View>
-                      </ScrollView>
-                    </View>
+                    <Text style={styles.dashboardFilterLabel}>FILTER BY MOOD</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={styles.moodChipsList}>
+                        {QUICK_MOOD_FILTERS.map((m) => {
+                          const isSelected = selectedMoodFilter === m.id;
+                          return (
+                            <TouchableOpacity
+                              key={m.id}
+                              activeOpacity={0.75}
+                              onPress={() => {
+                                animateNext();
+                                dispatch(setSelectedMoodFilter(isSelected ? null : m.id));
+                              }}
+                              style={[
+                                styles.dashboardMoodChip,
+                                isSelected && styles.dashboardMoodChipSelected,
+                              ]}
+                            >
+                              <Text style={styles.quickMoodEmoji}>{m.emoji}</Text>
+                              <Text style={[
+                                styles.dashboardMoodText,
+                                isSelected && styles.dashboardMoodTextSelected,
+                              ]}>
+                                {m.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </ScrollView>
 
-                    {/* Active Filter Indicator & Reset */}
                     {hasActiveFilters && (
                       <View style={styles.activeFilterStatusRow}>
                         <Text style={styles.activeFilterStatusText}>
-                          Showing {totalMatchingEntries}{' '}
-                          {totalMatchingEntries === 1 ? 'match' : 'matches'}
+                          Showing {totalMatchingEntries} {totalMatchingEntries === 1 ? 'match' : 'matches'}
                         </Text>
                         <TouchableOpacity
                           onPress={() => {
@@ -648,7 +737,7 @@ export const HomeScreen: React.FC = () => {
                           }}
                           style={styles.clearAllFiltersBtn}
                         >
-                          <Text style={styles.clearAllFiltersText}>Clear Filters</Text>
+                          <Text style={styles.clearAllFiltersText}>Clear filters</Text>
                         </TouchableOpacity>
                       </View>
                     )}
@@ -767,11 +856,11 @@ export const HomeScreen: React.FC = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#FAF7FB',
+    backgroundColor: '#F7F9F7',
   },
   container: {
     flex: 1,
-    backgroundColor: '#FAF7FB',
+    backgroundColor: '#F7F9F7',
     position: 'relative',
   },
   scrollContent: {
@@ -976,7 +1065,7 @@ const styles = StyleSheet.create({
   moodCountChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FAF7FB',
+    backgroundColor: '#F7F9F7',
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -1003,7 +1092,7 @@ const styles = StyleSheet.create({
   tagCountChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FAF7FB',
+    backgroundColor: '#F7F9F7',
     borderRadius: 14,
     paddingLeft: 12,
     paddingRight: 6,
@@ -1198,5 +1287,343 @@ const styles = StyleSheet.create({
     fontSize: 14.5,
     fontWeight: '600',
     color: '#2F2448',
+  },
+  usersSearchInput: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: '#1A202C',
+  },
+  cardsRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 24, // Extra margin to account for lower offset card
+  },
+  cardWrapper: {
+    flex: 1,
+    paddingHorizontal: 10
+  },
+  offsetUp: {
+    marginTop: 0,
+    marginBottom: 20,
+  },
+  offsetDown: {
+    marginTop: 24,
+    marginBottom: 0,
+  },
+  card: {
+    padding: 18,
+    borderRadius: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    elevation: 3,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    marginBottom: 2,
+    letterSpacing: -0.3,
+  },
+  cardRelation: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 12,
+    opacity: 0.8,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  // Enterprise dashboard redesign
+  dashboardHeader: {
+    paddingHorizontal: 22,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  dashboardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 27,
+  },
+  dashboardBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  dashboardBrandMark: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: '#263B35',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dashboardBrandName: {
+    color: '#1D2939',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.7,
+  },
+  dashboardBrandCaption: {
+    color: '#98A2B3',
+    fontSize: 8,
+    fontWeight: '700',
+    letterSpacing: 1.15,
+    marginTop: 3,
+  },
+  dashboardAvatarButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#E8EEE9',
+    borderWidth: 1,
+    borderColor: '#D5DFD7',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dashboardAvatarText: {
+    color: '#263B35',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  dashboardOnlineDot: {
+    position: 'absolute',
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    right: 0,
+    bottom: 1,
+    backgroundColor: '#4C9A70',
+    borderWidth: 2,
+    borderColor: '#FAFBF9',
+  },
+  dashboardWelcome: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 22,
+  },
+  dashboardWelcomeCopy: {
+    flex: 1,
+    paddingRight: 10,
+  },
+  dashboardEyebrow: {
+    color: '#718078',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1.55,
+    marginBottom: 8,
+  },
+  dashboardGreeting: {
+    color: '#1D2939',
+    fontSize: 27,
+    lineHeight: 34,
+    fontWeight: '800',
+    letterSpacing: -0.9,
+  },
+  dashboardSubtitle: {
+    color: '#66736C',
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginTop: 5,
+  },
+  dashboardStreak: {
+    minWidth: 76,
+    paddingVertical: 11,
+    paddingHorizontal: 10,
+    borderRadius: 13,
+    backgroundColor: '#F4F0E5',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dashboardStreakValue: {
+    color: '#624C22',
+    fontSize: 19,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  dashboardStreakLabel: {
+    color: '#927A4B',
+    fontSize: 7,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginTop: 2,
+  },
+  dashboardMetrics: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E8ECE8',
+    paddingVertical: 15,
+    marginBottom: 16,
+  },
+  dashboardMetric: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  dashboardMetricValue: {
+    color: '#263B35',
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  dashboardMetricLabel: {
+    color: '#8A968F',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginTop: 4,
+  },
+  dashboardMetricDivider: {
+    width: 1,
+    height: 29,
+    backgroundColor: '#E9EDE9',
+  },
+  dashboardComposeButton: {
+    minHeight: 76,
+    borderRadius: 15,
+    backgroundColor: '#263B35',
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 29,
+  },
+  dashboardComposeIcon: {
+    width: 39,
+    height: 39,
+    borderRadius: 11,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  dashboardComposeCopy: {
+    flex: 1,
+  },
+  dashboardComposeTitle: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  dashboardComposeSubtitle: {
+    color: '#C6D2CB',
+    fontSize: 11,
+    marginTop: 4,
+  },
+  dashboardFeedHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+  },
+  dashboardFeedEyebrow: {
+    color: '#87948C',
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 1.45,
+    marginBottom: 5,
+  },
+  dashboardFeedTitle: {
+    color: '#1D2939',
+    fontSize: 21,
+    fontWeight: '800',
+    letterSpacing: -0.55,
+  },
+  dashboardFeedSubtitle: {
+    color: '#89948D',
+    fontSize: 11,
+    marginTop: 4,
+  },
+  dashboardFeedActions: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  dashboardIconButton: {
+    width: 39,
+    height: 39,
+    borderRadius: 11,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E5EAE6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dashboardIconButtonActive: {
+    backgroundColor: '#EAF0EB',
+    borderColor: '#B8C8BC',
+  },
+  dashboardFilterPanel: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E7ECE8',
+    borderRadius: 14,
+    padding: 13,
+    marginBottom: 17,
+  },
+  dashboardSearchField: {
+    height: 43,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E7ECE8',
+    borderRadius: 10,
+    paddingHorizontal: 11,
+    marginBottom: 14,
+    backgroundColor: '#FBFCFB',
+  },
+  dashboardSearchInput: {
+    flex: 1,
+    height: '100%',
+    marginLeft: 8,
+    color: '#263B35',
+    fontSize: 13,
+  },
+  dashboardFilterLabel: {
+    color: '#87948C',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 1,
+    marginBottom: 9,
+  },
+  dashboardMoodChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F7F9F7',
+    borderWidth: 1,
+    borderColor: '#E7ECE8',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 9,
+    gap: 5,
+  },
+  dashboardMoodChipSelected: {
+    backgroundColor: '#EAF0EB',
+    borderColor: '#8CA795',
+  },
+  dashboardMoodText: {
+    color: '#58665E',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  dashboardMoodTextSelected: {
+    color: '#263B35',
+    fontWeight: '800',
   },
 });
