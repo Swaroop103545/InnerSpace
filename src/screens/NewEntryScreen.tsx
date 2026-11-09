@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useMemo } from 'react';
 import {
   StyleSheet,
@@ -14,14 +15,22 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
+import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
+import {
+  useFonts,
+  PlayfairDisplay_700Bold,
+} from '@expo-google-fonts/playfair-display';
 import { Caveat_600SemiBold } from '@expo-google-fonts/caveat';
+
 import { JournalEntry, PolaroidData } from '../types';
 import { useAppDispatch } from '../store/hooks';
 import { addEntry, updateEntry } from '../store/slices/journalSlice';
 import { closeNewEntryModal } from '../store/slices/uiSlice';
-import { rephraseText, REPHRASE_TONES, RephraseTone } from '../utils/rephrase';
+import {
+  rephraseText,
+  REPHRASE_TONES,
+  RephraseTone,
+} from '../utils/rephrase';
 
 export interface NewEntryScreenProps {
   onClose?: () => void;
@@ -30,6 +39,52 @@ export interface NewEntryScreenProps {
   initialDate?: Date;
   fontsLoaded?: boolean;
 }
+
+type JournalMode = 'plain' | 'daily';
+type PickerType =
+  | 'mood'
+  | 'weather'
+  | 'tags'
+  | 'font'
+  | 'theme'
+  | 'polaroid'
+  | 'rephraseTone'
+  | null;
+
+const DAILY_MARKER = '[[DAILY_JOURNAL]]';
+
+const DAILY_FIELDS = [
+  {
+    key: 'highlight',
+    title: 'Today’s highlight',
+    subtitle: 'What made today memorable?',
+    placeholder: 'Write about a moment worth remembering...',
+    icon: 'sunny-outline' as const,
+  },
+  {
+    key: 'gratitude',
+    title: 'Grateful for',
+    subtitle: 'What are you thankful for today?',
+    placeholder: 'Something, someone, or even a small moment...',
+    icon: 'heart-outline' as const,
+  },
+  {
+    key: 'challenge',
+    title: 'Today’s challenge',
+    subtitle: 'What was difficult, and what did you learn?',
+    placeholder: 'Be honest. This is your private space...',
+    icon: 'flag-outline' as const,
+  },
+  {
+    key: 'tomorrow',
+    title: 'Tomorrow’s intention',
+    subtitle: 'What would you like to focus on?',
+    placeholder: 'One thing you want to make time for...',
+    icon: 'arrow-forward-circle-outline' as const,
+  },
+] as const;
+
+type DailyFieldKey = (typeof DAILY_FIELDS)[number]['key'];
 
 const AVAILABLE_MOODS = [
   { id: 'happy', label: 'Happy', emoji: '😊' },
@@ -70,42 +125,66 @@ const COLOR_THEMES = [
     id: 'clean-white',
     name: 'Clean Slate',
     backgroundColor: '#FAFAFA',
-    textColors: { date: '#781552', title: '#222222', body: '#333333' },
+    textColors: {
+      date: '#781552',
+      title: '#222222',
+      body: '#333333',
+    },
     previewColor: '#FAFAFA',
   },
   {
     id: 'matcha-pink',
     name: 'Matcha Rose',
-    backgroundColor: '#FADADD', // Soft Pastel Pink
-    textColors: { date: '#781552', title: '#470938', body: '#73175A' },
+    backgroundColor: '#FADADD',
+    textColors: {
+      date: '#781552',
+      title: '#470938',
+      body: '#73175A',
+    },
     previewColor: '#FADADD',
   },
   {
     id: 'pumpkin-orange',
     name: 'Autumn Spice',
-    backgroundColor: '#FDE3D9', // Soft Pastel Peach/Orange
-    textColors: { date: '#722108', title: '#3B0E01', body: '#6F230A' },
+    backgroundColor: '#FDE3D9',
+    textColors: {
+      date: '#722108',
+      title: '#3B0E01',
+      body: '#6F230A',
+    },
     previewColor: '#FDE3D9',
   },
   {
     id: 'forest-green',
     name: 'Quiet Moss',
-    backgroundColor: '#E2F0D9', // Soft Pastel Sage Green
-    textColors: { date: '#0E5B2C', title: '#073519', body: '#0A4C25' },
+    backgroundColor: '#E2F0D9',
+    textColors: {
+      date: '#0E5B2C',
+      title: '#073519',
+      body: '#0A4C25',
+    },
     previewColor: '#E2F0D9',
   },
   {
     id: 'golden-hour',
     name: 'Golden Light',
-    backgroundColor: '#FEF3D6', // Soft Pastel Cream/Yellow
-    textColors: { date: '#7A4705', title: '#3D1F00', body: '#6E3C04' },
+    backgroundColor: '#FEF3D6',
+    textColors: {
+      date: '#7A4705',
+      title: '#3D1F00',
+      body: '#6E3C04',
+    },
     previewColor: '#FEF3D6',
   },
   {
     id: 'lavender',
     name: 'Lavender Dusk',
-    backgroundColor: '#EAE4F2', // Soft Pastel Lavender
-    textColors: { date: '#431780', title: '#260B4C', body: '#41157E' },
+    backgroundColor: '#EAE4F2',
+    textColors: {
+      date: '#431780',
+      title: '#260B4C',
+      body: '#41157E',
+    },
     previewColor: '#EAE4F2',
   },
 ];
@@ -129,7 +208,48 @@ const SAMPLE_POLAROIDS = [
     caption: 'Golden Glow ✨',
     tapeColor: 'rgba(180, 240, 230, 0.85)',
   },
-];
+] as PolaroidData[];
+
+const DAILY_LABELS: Record<DailyFieldKey, string> = {
+  highlight: 'TODAY’S HIGHLIGHT',
+  gratitude: 'GRATEFUL FOR',
+  challenge: 'TODAY’S CHALLENGE',
+  tomorrow: 'TOMORROW’S INTENTION',
+};
+
+const parseDailyContent = (body: string) => {
+  const result: Record<DailyFieldKey, string> = {
+    highlight: '',
+    gratitude: '',
+    challenge: '',
+    tomorrow: '',
+  };
+
+  if (!body.startsWith(DAILY_MARKER)) {
+    return null;
+  }
+
+  const lines = body.split('\n');
+  let currentKey: DailyFieldKey | null = null;
+
+  lines.slice(1).forEach((line) => {
+    const matchedKey = (
+      Object.keys(DAILY_LABELS) as DailyFieldKey[]
+    ).find((key) => line.trim() === DAILY_LABELS[key]);
+
+    if (matchedKey) {
+      currentKey = matchedKey;
+      return;
+    }
+
+    if (currentKey) {
+      result[currentKey] +=
+        (result[currentKey] ? '\n' : '') + line;
+    }
+  });
+
+  return result;
+};
 
 export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
   onClose,
@@ -140,16 +260,19 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
 }) => {
   const dispatch = useAppDispatch();
   const insets = useSafeAreaInsets();
+
   const [internalFontsLoaded] = useFonts({
     PlayfairDisplay_700Bold,
     Caveat_600SemiBold,
   });
-  const fontsLoaded = passedFontsLoaded ?? internalFontsLoaded;
 
+  const fontsLoaded = passedFontsLoaded ?? internalFontsLoaded;
   const isEditing = Boolean(entryToEdit);
 
   const initialEntryDate = useMemo(() => {
-    if (entryToEdit?.timestamp) return new Date(entryToEdit.timestamp);
+    if (entryToEdit?.timestamp) {
+      return new Date(entryToEdit.timestamp);
+    }
     return initialDate || new Date();
   }, [entryToEdit, initialDate]);
 
@@ -157,73 +280,202 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
 
   const initialContent = useMemo(() => {
     if (!entryToEdit) return '';
+
     if (entryToEdit.title && entryToEdit.body) {
       if (entryToEdit.body.startsWith(entryToEdit.title)) {
         return entryToEdit.body;
       }
+
       return `${entryToEdit.title}\n${entryToEdit.body}`;
     }
+
     return entryToEdit.body || entryToEdit.title || '';
   }, [entryToEdit]);
 
-  const [content, setContent] = useState<string>(initialContent);
-  const [selectedMood, setSelectedMood] = useState<string | null>(entryToEdit?.mood || null);
-  const [selectedWeather, setSelectedWeather] = useState<string | null>(entryToEdit?.weather || null);
-  const [selectedTags, setSelectedTags] = useState<string[]>(entryToEdit?.tags || []);
+  const existingDailyFields = useMemo(() => {
+    if (!entryToEdit?.body) return null;
+    return parseDailyContent(entryToEdit.body);
+  }, [entryToEdit]);
+
+  const [journalMode, setJournalMode] = useState<JournalMode>(
+    existingDailyFields ? 'daily' : 'plain'
+  );
+
+  const [content, setContent] = useState<string>(
+    existingDailyFields ? '' : initialContent
+  );
+
+  const [dailyFields, setDailyFields] = useState<
+    Record<DailyFieldKey, string>
+  >(
+    existingDailyFields || {
+      highlight: '',
+      gratitude: '',
+      challenge: '',
+      tomorrow: '',
+    }
+  );
+
+  const [selectedMood, setSelectedMood] = useState<string | null>(
+    entryToEdit?.mood || null
+  );
+
+  const [selectedWeather, setSelectedWeather] = useState<string | null>(
+    entryToEdit?.weather || null
+  );
+
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    entryToEdit?.tags || []
+  );
 
   const initialTheme = useMemo(() => {
     if (!entryToEdit) return COLOR_THEMES[0];
+
     return (
       COLOR_THEMES.find(
-        (t) =>
-          t.backgroundColor.toLowerCase() === entryToEdit.backgroundColor.toLowerCase()
+        (theme) =>
+          theme.backgroundColor.toLowerCase() ===
+          entryToEdit.backgroundColor.toLowerCase()
       ) || COLOR_THEMES[0]
     );
   }, [entryToEdit]);
 
   const [activeTheme, setActiveTheme] = useState(initialTheme);
-  const [textAlignment, setTextAlignment] = useState<'left' | 'center' | 'right'>(
-    entryToEdit?.alignment || 'left'
-  );
-  const [selectedFont, setSelectedFont] = useState<'system' | 'serif' | 'handwriting'>(
-    (entryToEdit?.fontFamily as any) || 'system'
-  );
-  const [fontSizeLevel, setFontSizeLevel] = useState<'regular' | 'large' | 'title'>('regular');
-  const [selectedPolaroid, setSelectedPolaroid] = useState<PolaroidData | null>(
-    entryToEdit?.polaroid || null
-  );
+
+  const [textAlignment, setTextAlignment] = useState<
+    'left' | 'center' | 'right'
+  >(entryToEdit?.alignment || 'left');
+
+  const [selectedFont, setSelectedFont] = useState<
+    'system' | 'serif' | 'handwriting'
+  >((entryToEdit?.fontFamily as any) || 'system');
+
+  const [fontSizeLevel, setFontSizeLevel] = useState<
+    'regular' | 'large' | 'title'
+  >('regular');
+
+  const [selectedPolaroid, setSelectedPolaroid] =
+    useState<PolaroidData | null>(entryToEdit?.polaroid || null);
+
   const [isRecordingMemo, setIsRecordingMemo] = useState(false);
   const [isRephrasing, setIsRephrasing] = useState(false);
-  const [selectedTone, setSelectedTone] = useState<RephraseTone>('reflective');
+  const [selectedTone, setSelectedTone] =
+    useState<RephraseTone>('reflective');
+
   const [variantCounter, setVariantCounter] = useState(0);
   const [undoHistory, setUndoHistory] = useState<string[]>([]);
   const [showRephraseBanner, setShowRephraseBanner] = useState(false);
 
-  // Active sheet modals
-  const [activePicker, setActivePicker] = useState<
-    'mood' | 'weather' | 'tags' | 'font' | 'theme' | 'polaroid' | 'rephraseTone' | null
-  >(null);
+  const [activePicker, setActivePicker] = useState<PickerType>(null);
 
   const inputRef = useRef<any>(null);
 
-  // Date formatting matching screenshot: Day number (e.g. "2"), Day of week ("Mon"), "2026.11"
   const dayNumber = entryDate.getDate();
-  const dayOfWeek = entryDate.toLocaleDateString('en-US', { weekday: 'short' });
-  const yearMonth = `${entryDate.getFullYear()}.${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
 
-  const charCount = content.length;
+  const dayOfWeek = entryDate.toLocaleDateString('en-US', {
+    weekday: 'long',
+  });
+
+  const yearMonth = `${entryDate.getFullYear()}.${String(
+    entryDate.getMonth() + 1
+  ).padStart(2, '0')}`;
+
+  const dailyCombinedContent = useMemo(() => {
+    return Object.values(dailyFields).join('\n');
+  }, [dailyFields]);
+
+  const charCount =
+    journalMode === 'plain'
+      ? content.length
+      : dailyCombinedContent.length;
+
+  const hasContent =
+    journalMode === 'plain'
+      ? content.trim().length > 0
+      : Object.values(dailyFields).some((value) => value.trim().length > 0);
+
+  const activeFontFamily = useMemo(() => {
+    if (!fontsLoaded) return undefined;
+
+    if (selectedFont === 'serif') {
+      return 'PlayfairDisplay_700Bold';
+    }
+
+    if (selectedFont === 'handwriting') {
+      return 'Caveat_600SemiBold';
+    }
+
+    return undefined;
+  }, [fontsLoaded, selectedFont]);
+
+  const activeFontSize = useMemo(() => {
+    if (fontSizeLevel === 'large') return 20;
+    if (fontSizeLevel === 'title') return 24;
+    return 17;
+  }, [fontSizeLevel]);
+
+  const activeLineHeight = activeFontSize * 1.55;
+
+  const updateDailyField = (
+    key: DailyFieldKey,
+    value: string
+  ) => {
+    setDailyFields((previous) => ({
+      ...previous,
+      [key]: value,
+    }));
+  };
+
+  const getSaveContent = () => {
+    if (journalMode === 'plain') {
+      return content.trim();
+    }
+
+    const sections = DAILY_FIELDS.map((field) => {
+      const value = dailyFields[field.key].trim();
+
+      if (!value) return '';
+
+      return `${DAILY_LABELS[field.key]}\n${value}`;
+    }).filter(Boolean);
+
+    return sections.length
+      ? `${DAILY_MARKER}\n${sections.join('\n\n')}`
+      : '';
+  };
+
+  const getDisplayTitle = (savedContent: string) => {
+    if (journalMode === 'daily') {
+      return 'Daily Reflection';
+    }
+
+    const firstLine = savedContent
+      .split('\n')
+      .find((line) => line.trim().length > 0);
+
+    return firstLine || 'Today’s Reflection';
+  };
 
   const handleClose = () => {
     const hasUnsaved = isEditing
-      ? content !== initialContent
-      : content.trim().length > 0;
+      ? (
+          journalMode === 'plain'
+            ? content !== initialContent || Boolean(existingDailyFields)
+            : !existingDailyFields ||
+              JSON.stringify(dailyFields) !==
+                JSON.stringify(existingDailyFields)
+        )
+      : hasContent;
 
     if (hasUnsaved) {
       Alert.alert(
         'Discard Changes?',
         'You have unsaved thoughts. Do you want to discard them?',
         [
-          { text: 'Keep Writing', style: 'cancel' },
+          {
+            text: 'Keep Writing',
+            style: 'cancel',
+          },
           {
             text: 'Discard',
             style: 'destructive',
@@ -234,62 +486,116 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
           },
         ]
       );
-    } else {
-      dispatch(closeNewEntryModal());
-      onClose?.();
+      return;
     }
+
+    dispatch(closeNewEntryModal());
+    onClose?.();
   };
 
-  const handleRephrase = async (toneToUse: RephraseTone = selectedTone) => {
-    const trimmed = content.trim();
-    if (!trimmed) {
+  const handleRephrase = async (
+    toneToUse: RephraseTone = selectedTone
+  ) => {
+    const source =
+      journalMode === 'plain'
+        ? content
+        : dailyCombinedContent;
+
+    if (!source.trim()) {
       Alert.alert(
         'Nothing to Rephrase',
-        'Please write a few thoughts or a journal sentence first, then tap Rephrase.'
+        'Please write something before using Rephrase.'
       );
       return;
     }
 
     try {
       setIsRephrasing(true);
-      // Save current content to undo history
-      setUndoHistory((prev) => [...prev, content]);
+      setUndoHistory((previous) => [...previous, source]);
+
       const nextVariant = variantCounter + 1;
       setVariantCounter(nextVariant);
 
-      const rephrased = await rephraseText(content, toneToUse, nextVariant);
-      setContent(rephrased);
+      const rephrased = await rephraseText(
+        source,
+        toneToUse,
+        nextVariant
+      );
+
+      if (journalMode === 'plain') {
+        setContent(rephrased);
+      } else {
+        setDailyFields((previous) => ({
+          ...previous,
+          highlight: rephrased,
+          gratitude: '',
+          challenge: '',
+          tomorrow: '',
+        }));
+      }
+
       setShowRephraseBanner(true);
     } catch {
-      Alert.alert('Rephrase Failed', 'Could not rephrase the text at this moment.');
+      Alert.alert(
+        'Rephrase Failed',
+        'Could not rephrase the text at this moment.'
+      );
     } finally {
       setIsRephrasing(false);
     }
   };
 
   const handleUndoRephrase = () => {
-    if (undoHistory.length === 0) return;
-    const previous = undoHistory[undoHistory.length - 1];
-    setUndoHistory((prev) => prev.slice(0, -1));
-    setContent(previous);
+    if (!undoHistory.length) return;
+
+    const previous =
+      undoHistory[undoHistory.length - 1];
+
+    setUndoHistory((history) => history.slice(0, -1));
+
+    if (journalMode === 'plain') {
+      setContent(previous);
+    } else {
+      setDailyFields({
+        highlight: previous,
+        gratitude: '',
+        challenge: '',
+        tomorrow: '',
+      });
+    }
+
     if (undoHistory.length <= 1) {
       setShowRephraseBanner(false);
     }
   };
 
   const handleSave = () => {
-    const trimmed = content.trim();
-    if (!trimmed && !selectedPolaroid) {
-      Alert.alert('Empty Entry', 'Please write something before saving.');
+    const savedContent = getSaveContent();
+
+    if (!savedContent && !selectedPolaroid) {
+      Alert.alert(
+        'Empty Entry',
+        'Please write something before saving.'
+      );
       return;
     }
 
-    // Determine title & body
-    const lines = trimmed.split('\n').filter((line) => line.trim().length > 0);
-    const firstLine = lines.length > 0 ? lines[0] : 'Today’s Reflection';
-    const restLines = lines.length > 1 ? lines.slice(1).join('\n') : (trimmed || 'A quiet moment.');
+    let firstLine = getDisplayTitle(savedContent);
+    let restLines = savedContent;
 
-    // Format full date for JournalCard (e.g. "MONDAY, NOV 02")
+    if (journalMode === 'plain') {
+      const lines = savedContent
+        .split('\n')
+        .filter((line) => line.trim().length > 0);
+
+      firstLine = lines[0] || 'Today’s Reflection';
+
+      restLines =
+        lines.length > 1
+          ? lines.slice(1).join('\n')
+          : savedContent || 'A quiet moment.';
+    }
+
     const fullDateStr = entryDate
       .toLocaleDateString('en-US', {
         weekday: 'long',
@@ -298,26 +604,41 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
       })
       .toUpperCase();
 
-    // Pick emoji from mood or weather if available
-    const moodObj = AVAILABLE_MOODS.find((m) => m.id === selectedMood);
-    const titleEmoji = moodObj ? moodObj.emoji : (entryToEdit?.titleEmoji || undefined);
+    const moodObj = AVAILABLE_MOODS.find(
+      (mood) => mood.id === selectedMood
+    );
 
-    const targetId = entryToEdit?.id || `entry-${Date.now()}`;
-    const targetTimestamp = entryToEdit?.timestamp || entryDate.getTime();
+    const titleEmoji =
+      moodObj?.emoji || entryToEdit?.titleEmoji || undefined;
+
+    const targetId =
+      entryToEdit?.id || `entry-${Date.now()}`;
+
+    const targetTimestamp =
+      entryToEdit?.timestamp || entryDate.getTime();
 
     const resultEntry: JournalEntry = {
       id: targetId,
       date: entryToEdit?.date || fullDateStr,
       timestamp: targetTimestamp,
-      title: firstLine.length > 35 ? `${firstLine.substring(0, 32)}...` : firstLine,
+      title:
+        firstLine.length > 35
+          ? `${firstLine.substring(0, 32)}...`
+          : firstLine,
       titleEmoji,
       body: restLines,
-      backgroundColor: activeTheme.backgroundColor === '#FFFFFF' ? '#FAF7FB' : activeTheme.backgroundColor,
+      backgroundColor:
+        activeTheme.backgroundColor === '#FFFFFF'
+          ? '#FAF7FB'
+          : activeTheme.backgroundColor,
       textColors: activeTheme.textColors,
       polaroid: selectedPolaroid || undefined,
       mood: selectedMood || undefined,
       weather: selectedWeather || undefined,
-      tags: selectedTags.length > 0 ? selectedTags : undefined,
+      tags:
+        selectedTags.length > 0
+          ? selectedTags
+          : undefined,
       alignment: textAlignment,
       fontFamily: selectedFont,
       isFavorite: entryToEdit?.isFavorite,
@@ -331,6 +652,7 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
       } else {
         dispatch(addEntry(resultEntry));
       }
+
       dispatch(closeNewEntryModal());
       onClose?.();
     }
@@ -338,762 +660,1266 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
 
   const handleInsertTimestamp = () => {
     const now = new Date();
+
     const hours = String(now.getHours()).padStart(2, '0');
     const minutes = String(now.getMinutes()).padStart(2, '0');
-    const timeStr = `${hours}:${minutes} `;
-    setContent((prev) => (prev ? `${prev}\n${timeStr}` : timeStr));
+
+    const time = `${hours}:${minutes}`;
+
+    if (journalMode === 'plain') {
+      setContent((previous) =>
+        previous ? `${previous}\n${time} ` : `${time} `
+      );
+    } else {
+      setDailyFields((previous) => ({
+        ...previous,
+        highlight: previous.highlight
+          ? `${previous.highlight}\n${time} `
+          : `${time} `,
+      }));
+    }
   };
 
   const cycleAlignment = () => {
-    if (textAlignment === 'left') setTextAlignment('center');
-    else if (textAlignment === 'center') setTextAlignment('right');
-    else setTextAlignment('left');
+    setTextAlignment((previous) => {
+      if (previous === 'left') return 'center';
+      if (previous === 'center') return 'right';
+      return 'left';
+    });
   };
 
   const toggleTag = (tag: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    setSelectedTags((previous) =>
+      previous.includes(tag)
+        ? previous.filter((item) => item !== tag)
+        : [...previous, tag]
     );
   };
 
-  const activeFontFamily = useMemo(() => {
-    if (!fontsLoaded) return undefined;
-    if (selectedFont === 'serif') return 'PlayfairDisplay_700Bold';
-    if (selectedFont === 'handwriting') return 'Caveat_600SemiBold';
-    return undefined;
-  }, [fontsLoaded, selectedFont]);
+  const switchMode = (mode: JournalMode) => {
+    if (mode === journalMode) return;
 
-  const activeFontSize = useMemo(() => {
-    if (fontSizeLevel === 'large') return 20;
-    if (fontSizeLevel === 'title') return 24;
-    return 17.5;
-  }, [fontSizeLevel]);
+    setJournalMode(mode);
+    setShowRephraseBanner(false);
+  };
 
-  const activeLineHeight = useMemo(() => {
-    return activeFontSize * 1.5;
-  }, [activeFontSize]);
+  const renderDailyField = (
+    field: (typeof DAILY_FIELDS)[number],
+    index: number
+  ) => (
+    <View key={field.key} style={styles.dailyFieldCard}>
+      <View style={styles.dailyFieldHeader}>
+        <View style={styles.dailyFieldIcon}>
+          <Ionicons
+            name={field.icon}
+            size={19}
+            color="#547365"
+          />
+        </View>
+
+        <View style={styles.dailyFieldHeading}>
+          <Text style={styles.dailyFieldTitle}>
+            {field.title}
+          </Text>
+          <Text style={styles.dailyFieldSubtitle}>
+            {field.subtitle}
+          </Text>
+        </View>
+
+        <Text style={styles.dailyFieldNumber}>
+          0{index + 1}
+        </Text>
+      </View>
+
+      <TextInput
+        style={[
+          styles.dailyFieldInput,
+          {
+            fontFamily: activeFontFamily,
+            fontSize: activeFontSize,
+            lineHeight: activeLineHeight,
+            textAlign: textAlignment,
+          },
+        ]}
+        placeholder={field.placeholder}
+        placeholderTextColor="#A4AAA6"
+        multiline
+        scrollEnabled={false}
+        textAlignVertical="top"
+        value={dailyFields[field.key]}
+        onChangeText={(value) =>
+          updateDailyField(field.key, value)
+        }
+        selectionColor="#4B9879"
+      />
+    </View>
+  );
+
+  const renderMetadata = () => (
+    <View style={styles.metadataCard}>
+      <Text style={styles.sectionEyebrow}>
+        ENTRY DETAILS
+      </Text>
+
+      <TouchableOpacity
+        style={styles.metaRow}
+        activeOpacity={0.7}
+        onPress={() => setActivePicker('mood')}
+      >
+        <View style={styles.metaIcon}>
+          <MaterialCommunityIcons
+            name="emoticon-happy-outline"
+            size={20}
+            color="#68736D"
+          />
+        </View>
+
+        <Text style={styles.metaLabel}>
+          Mood
+        </Text>
+
+        <Text style={styles.metaValue}>
+          {selectedMood
+            ? `${
+                AVAILABLE_MOODS.find(
+                  (mood) => mood.id === selectedMood
+                )?.emoji
+              } ${
+                AVAILABLE_MOODS.find(
+                  (mood) => mood.id === selectedMood
+                )?.label
+              }`
+            : 'Add mood'}
+        </Text>
+
+        <Feather
+          name="chevron-right"
+          size={17}
+          color="#A1AAA5"
+        />
+      </TouchableOpacity>
+
+      <View style={styles.metaDivider} />
+
+      <TouchableOpacity
+        style={styles.metaRow}
+        activeOpacity={0.7}
+        onPress={() => setActivePicker('weather')}
+      >
+        <View style={styles.metaIcon}>
+          <MaterialCommunityIcons
+            name="weather-partly-cloudy"
+            size={20}
+            color="#68736D"
+          />
+        </View>
+
+        <Text style={styles.metaLabel}>
+          Weather
+        </Text>
+
+        <Text style={styles.metaValue}>
+          {selectedWeather
+            ? `${
+                AVAILABLE_WEATHER.find(
+                  (weather) => weather.id === selectedWeather
+                )?.emoji
+              } ${
+                AVAILABLE_WEATHER.find(
+                  (weather) => weather.id === selectedWeather
+                )?.label
+              }`
+            : 'Add weather'}
+        </Text>
+
+        <Feather
+          name="chevron-right"
+          size={17}
+          color="#A1AAA5"
+        />
+      </TouchableOpacity>
+
+      <View style={styles.metaDivider} />
+
+      <TouchableOpacity
+        style={styles.metaRow}
+        activeOpacity={0.7}
+        onPress={() => setActivePicker('tags')}
+      >
+        <View style={styles.metaIcon}>
+          <MaterialCommunityIcons
+            name="bookmark-outline"
+            size={20}
+            color="#68736D"
+          />
+        </View>
+
+        <Text style={styles.metaLabel}>
+          Tags
+        </Text>
+
+        <Text
+          style={styles.metaValue}
+          numberOfLines={1}
+        >
+          {selectedTags.length
+            ? selectedTags.map((tag) => `#${tag}`).join(' ')
+            : 'Add tags'}
+        </Text>
+
+        <Feather
+          name="chevron-right"
+          size={17}
+          color="#A1AAA5"
+        />
+      </TouchableOpacity>
+
+      <View style={styles.metaDivider} />
+
+      <View style={styles.metaRow}>
+        <View style={styles.metaIcon}>
+          <MaterialCommunityIcons
+            name="text-box-outline"
+            size={20}
+            color="#68736D"
+          />
+        </View>
+
+        <Text style={styles.metaLabel}>
+          Characters
+        </Text>
+
+        <Text style={styles.metaValue}>
+          {charCount}
+        </Text>
+      </View>
+    </View>
+  );
+
+  const renderPickerContent = () => {
+    switch (activePicker) {
+      case 'mood':
+        return (
+          <View>
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>
+                How are you feeling?
+              </Text>
+
+              {selectedMood ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedMood(null);
+                    setActivePicker(null);
+                  }}
+                >
+                  <Text style={styles.sheetClearText}>
+                    Clear
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <View style={styles.chipGrid}>
+              {AVAILABLE_MOODS.map((item) => {
+                const selected = selectedMood === item.id;
+
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.choiceChip,
+                      selected && styles.choiceChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedMood(
+                        selected ? null : item.id
+                      );
+                      setActivePicker(null);
+                    }}
+                  >
+                    <Text style={styles.choiceEmoji}>
+                      {item.emoji}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.choiceText,
+                        selected && styles.choiceTextSelected,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        );
+
+      case 'weather':
+        return (
+          <View>
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>
+                Today's Weather
+              </Text>
+
+              {selectedWeather ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedWeather(null);
+                    setActivePicker(null);
+                  }}
+                >
+                  <Text style={styles.sheetClearText}>
+                    Clear
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <View style={styles.chipGrid}>
+              {AVAILABLE_WEATHER.map((item) => {
+                const selected =
+                  selectedWeather === item.id;
+
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[
+                      styles.choiceChip,
+                      selected && styles.choiceChipSelected,
+                    ]}
+                    onPress={() => {
+                      setSelectedWeather(
+                        selected ? null : item.id
+                      );
+                      setActivePicker(null);
+                    }}
+                  >
+                    <Text style={styles.choiceEmoji}>
+                      {item.emoji}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.choiceText,
+                        selected && styles.choiceTextSelected,
+                      ]}
+                    >
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        );
+
+      case 'tags':
+        return (
+          <View>
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>
+                Select Tags
+              </Text>
+
+              {selectedTags.length > 0 ? (
+                <TouchableOpacity
+                  onPress={() => setSelectedTags([])}
+                >
+                  <Text style={styles.sheetClearText}>
+                    Clear All
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            <View style={styles.chipGrid}>
+              {PRESET_TAGS.map((tag) => {
+                const selected = selectedTags.includes(tag);
+
+                return (
+                  <TouchableOpacity
+                    key={tag}
+                    style={[
+                      styles.choiceChip,
+                      selected && styles.choiceChipSelected,
+                    ]}
+                    onPress={() => toggleTag(tag)}
+                  >
+                    <Text
+                      style={[
+                        styles.choiceText,
+                        selected && styles.choiceTextSelected,
+                      ]}
+                    >
+                      #{tag}
+                    </Text>
+
+                    {selected ? (
+                      <Feather
+                        name="check"
+                        size={13}
+                        color="#347B5C"
+                      />
+                    ) : null}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <TouchableOpacity
+              style={styles.sheetDoneButton}
+              onPress={() => setActivePicker(null)}
+            >
+              <Text style={styles.sheetDoneText}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'font':
+        return (
+          <View>
+            <Text style={styles.sheetTitle}>
+              Typography
+            </Text>
+
+            <Text style={styles.sheetSubheading}>
+              Font style
+            </Text>
+
+            <View style={styles.fontOptionsRow}>
+              {(
+                [
+                  {
+                    id: 'system',
+                    title: 'Modern Sans',
+                    subtitle: 'Minimal',
+                  },
+                  {
+                    id: 'serif',
+                    title: 'Playfair',
+                    subtitle: 'Editorial',
+                  },
+                  {
+                    id: 'handwriting',
+                    title: 'Caveat',
+                    subtitle: 'Handwritten',
+                  },
+                ] as const
+              ).map((font) => (
+                <TouchableOpacity
+                  key={font.id}
+                  onPress={() => setSelectedFont(font.id)}
+                  style={[
+                    styles.fontOption,
+                    selectedFont === font.id &&
+                      styles.fontOptionSelected,
+                  ]}
+                >
+                  <Text style={styles.fontOptionTitle}>
+                    {font.title}
+                  </Text>
+                  <Text style={styles.fontOptionSubtitle}>
+                    {font.subtitle}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={styles.sheetSubheading}>
+              Text size
+            </Text>
+
+            <View style={styles.fontSizeRow}>
+              {(
+                ['regular', 'large', 'title'] as const
+              ).map((level) => (
+                <TouchableOpacity
+                  key={level}
+                  onPress={() => setFontSizeLevel(level)}
+                  style={[
+                    styles.sizeButton,
+                    fontSizeLevel === level &&
+                      styles.sizeButtonSelected,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.sizeButtonText,
+                      fontSizeLevel === level &&
+                        styles.sizeButtonTextSelected,
+                    ]}
+                  >
+                    {level === 'regular'
+                      ? 'Standard'
+                      : level === 'large'
+                        ? 'Large'
+                        : 'Headline'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.sheetDoneButton}
+              onPress={() => setActivePicker(null)}
+            >
+              <Text style={styles.sheetDoneText}>
+                Apply
+              </Text>
+            </TouchableOpacity>
+          </View>
+        );
+
+      case 'theme':
+        return (
+          <View>
+            <Text style={styles.sheetTitle}>
+              Card theme
+            </Text>
+
+            <Text style={styles.sheetDescription}>
+              Choose a background for your journal entry.
+            </Text>
+
+            <View style={styles.themeGrid}>
+              {COLOR_THEMES.map((theme) => {
+                const selected =
+                  activeTheme.id === theme.id;
+
+                return (
+                  <TouchableOpacity
+                    key={theme.id}
+                    style={styles.themeOption}
+                    onPress={() => {
+                      setActiveTheme(theme);
+                      setActivePicker(null);
+                    }}
+                  >
+                    <View
+                      style={[
+                        styles.themeSwatch,
+                        {
+                          backgroundColor:
+                            theme.previewColor,
+                        },
+                        selected && styles.themeSwatchSelected,
+                      ]}
+                    >
+                      {selected ? (
+                        <Feather
+                          name="check"
+                          size={18}
+                          color="#333"
+                        />
+                      ) : null}
+                    </View>
+
+                    <Text style={styles.themeName}>
+                      {theme.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        );
+
+      case 'polaroid':
+        return (
+          <View>
+            <View style={styles.sheetHeaderRow}>
+              <Text style={styles.sheetTitle}>
+                Attach Photo Polaroid
+              </Text>
+
+              {selectedPolaroid ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setSelectedPolaroid(null);
+                    setActivePicker(null);
+                  }}
+                >
+                  <Text style={styles.sheetClearText}>
+                    Remove
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+
+            {SAMPLE_POLAROIDS.map((photo) => {
+              const selected =
+                selectedPolaroid?.caption === photo.caption;
+
+              return (
+                <TouchableOpacity
+                  key={photo.id}
+                  style={[
+                    styles.polaroidOption,
+                    selected && styles.polaroidOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedPolaroid(
+                      selected ? null : photo
+                    );
+                    setActivePicker(null);
+                  }}
+                >
+                  <View style={styles.polaroidOptionIcon}>
+                    <MaterialCommunityIcons
+                      name="image-outline"
+                      size={21}
+                      color="#547365"
+                    />
+                  </View>
+
+                  <View style={styles.polaroidOptionText}>
+                    <Text style={styles.polaroidOptionTitle}>
+                      {photo.caption}
+                    </Text>
+                    <Text style={styles.polaroidOptionSubtitle}>
+                      {selected ? 'Attached' : 'Tap to attach'}
+                    </Text>
+                  </View>
+
+                  <Feather
+                    name={selected ? 'check-circle' : 'plus-circle'}
+                    size={19}
+                    color={selected ? '#347B5C' : '#9CA59F'}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        );
+
+      case 'rephraseTone':
+        return (
+          <View>
+            <Text style={styles.sheetTitle}>
+              Rephrase style
+            </Text>
+
+            <Text style={styles.sheetDescription}>
+              Choose the tone that best expresses your thoughts.
+            </Text>
+
+            {REPHRASE_TONES.map((tone) => {
+              const selected = selectedTone === tone.id;
+
+              return (
+                <TouchableOpacity
+                  key={tone.id}
+                  style={[
+                    styles.toneOption,
+                    selected && styles.toneOptionSelected,
+                  ]}
+                  onPress={() => {
+                    setSelectedTone(tone.id);
+                    setActivePicker(null);
+                    handleRephrase(tone.id);
+                  }}
+                >
+                  <Text style={styles.toneEmoji}>
+                    {tone.emoji}
+                  </Text>
+
+                  <View style={styles.toneTextColumn}>
+                    <Text style={styles.toneTitle}>
+                      {tone.name}
+                    </Text>
+                    <Text style={styles.toneDescription}>
+                      {tone.description}
+                    </Text>
+                  </View>
+
+                  {selected ? (
+                    <Feather
+                      name="check"
+                      size={18}
+                      color="#347B5C"
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        );
+
+      default:
+        return null;
+    }
+  };
 
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
 
-      {/* Top Safe Area & Action Header */}
-      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) }]}>
+      {/* HEADER */}
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: Math.max(insets.top, 14),
+          },
+        ]}
+      >
         <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={handleClose}
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           style={styles.closeButton}
+          onPress={handleClose}
+          hitSlop={{
+            top: 12,
+            bottom: 12,
+            left: 12,
+            right: 12,
+          }}
         >
-          <Feather name="x" size={26} color="#222222" />
+          <Feather
+            name="x"
+            size={23}
+            color="#26332D"
+          />
         </TouchableOpacity>
 
-        <View style={styles.headerRightActions}>
+        <View style={styles.headerTitleContainer}>
+          <Text style={styles.headerTitle}>
+            {isEditing ? 'Edit entry' : 'New entry'}
+          </Text>
+          <Text style={styles.headerSubtitle}>
+            Your personal space
+          </Text>
+        </View>
+
+        <View style={styles.headerActions}>
           <TouchableOpacity
-            activeOpacity={0.8}
+            style={styles.rephraseButton}
             onPress={() => handleRephrase()}
             disabled={isRephrasing}
-            style={[
-              styles.rephraseButton,
-              isRephrasing && styles.rephraseButtonDisabled,
-            ]}
-            accessibilityRole="button"
-            accessibilityLabel="Rephrase text"
           >
             {isRephrasing ? (
-              <ActivityIndicator size="small" color="#24744E" />
+              <ActivityIndicator
+                size="small"
+                color="#347B5C"
+              />
             ) : (
-              <MaterialCommunityIcons name="auto-fix" size={16} color="#24744E" />
+              <MaterialCommunityIcons
+                name="auto-fix"
+                size={16}
+                color="#347B5C"
+              />
             )}
             <Text style={styles.rephraseButtonText}>
-              {isRephrasing ? 'Rephrasing...' : 'Rephrase'}
+              AI
             </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={handleSave}
             style={styles.saveButton}
+            onPress={handleSave}
+            activeOpacity={0.85}
           >
-            <Text style={styles.saveButtonText}>{isEditing ? 'Update' : 'Save'}</Text>
+            <Text style={styles.saveButtonText}>
+              {isEditing ? 'Update' : 'Save'}
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
 
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <ScrollView
           style={styles.scrollArea}
           contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {/* Date Indicator Row matching screenshot: Day number, Mon, 2026.11 */}
-          <View style={styles.dateRow}>
-            <Text style={styles.dayNumberText}>{dayNumber}</Text>
-            <View style={styles.dateMetaColumn}>
-              <Text style={styles.dayOfWeekText}>{dayOfWeek}</Text>
-              <Text style={styles.yearMonthText}>{yearMonth}</Text>
+          {/* DATE */}
+          <View style={styles.dateSection}>
+            <View>
+              <Text style={styles.dateDayNumber}>
+                {dayNumber}
+              </Text>
+            </View>
+
+            <View style={styles.dateDetails}>
+              <Text style={styles.dateWeekday}>
+                {dayOfWeek}
+              </Text>
+              <Text style={styles.dateMonth}>
+                {yearMonth}
+              </Text>
+            </View>
+
+            <View style={styles.dateRight}>
+              <View style={styles.dateDot} />
+              <Text style={styles.dateLabel}>
+                JOURNAL ENTRY
+              </Text>
             </View>
           </View>
 
-          {/* Rephrased Feedback Banner (if active) */}
+          {/* JOURNAL MODE SWITCH */}
+          <View style={styles.modeContainer}>
+            <View style={styles.modeHeading}>
+              <Text style={styles.modeHeadingTitle}>
+                Writing format
+              </Text>
+              <Text style={styles.modeHeadingSubtitle}>
+                Choose how you want to reflect today.
+              </Text>
+            </View>
+
+            <View style={styles.modeSwitch}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[
+                  styles.modeOption,
+                  journalMode === 'plain' &&
+                    styles.modeOptionActive,
+                ]}
+                onPress={() => switchMode('plain')}
+              >
+                <Feather
+                  name="edit-3"
+                  size={16}
+                  color={
+                    journalMode === 'plain'
+                      ? '#FFFFFF'
+                      : '#66736C'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.modeOptionText,
+                    journalMode === 'plain' &&
+                      styles.modeOptionTextActive,
+                  ]}
+                >
+                  Plain Journal
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.85}
+                style={[
+                  styles.modeOption,
+                  journalMode === 'daily' &&
+                    styles.modeOptionActive,
+                ]}
+                onPress={() => switchMode('daily')}
+              >
+                <Feather
+                  name="calendar"
+                  size={16}
+                  color={
+                    journalMode === 'daily'
+                      ? '#FFFFFF'
+                      : '#66736C'
+                  }
+                />
+                <Text
+                  style={[
+                    styles.modeOptionText,
+                    journalMode === 'daily' &&
+                      styles.modeOptionTextActive,
+                  ]}
+                >
+                  Daily Journal
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* REPHRASE FEEDBACK */}
           {showRephraseBanner ? (
             <View style={styles.rephraseBanner}>
-              <View style={styles.rephraseBannerLeft}>
-                <MaterialCommunityIcons name="creation" size={16} color="#2F855A" />
-                <Text style={styles.rephraseBannerTitle}>
+              <View style={styles.rephraseBannerInfo}>
+                <MaterialCommunityIcons
+                  name="creation"
+                  size={17}
+                  color="#347B5C"
+                />
+                <Text style={styles.rephraseBannerText}>
                   Rephrased ·{' '}
-                  <Text style={styles.rephraseBannerTone}>
-                    {REPHRASE_TONES.find((t) => t.id === selectedTone)?.name}
-                  </Text>
+                  {REPHRASE_TONES.find(
+                    (tone) => tone.id === selectedTone
+                  )?.name}
                 </Text>
               </View>
 
-              <View style={styles.rephraseBannerActions}>
+              <View style={styles.rephraseActions}>
                 <TouchableOpacity
-                  onPress={() => setActivePicker('rephraseTone')}
-                  style={styles.rephraseBannerToneBtn}
-                  activeOpacity={0.7}
+                  onPress={() =>
+                    setActivePicker('rephraseTone')
+                  }
                 >
-                  <Text style={styles.rephraseBannerToneBtnText}>Tone</Text>
-                  <Feather name="chevron-down" size={12} color="#2F855A" />
+                  <Text style={styles.rephraseActionText}>
+                    Tone
+                  </Text>
                 </TouchableOpacity>
 
                 {undoHistory.length > 0 ? (
                   <TouchableOpacity
                     onPress={handleUndoRephrase}
-                    style={styles.rephraseBannerUndoBtn}
-                    activeOpacity={0.7}
+                    style={styles.undoButton}
                   >
-                    <MaterialCommunityIcons name="undo" size={13} color="#555555" />
-                    <Text style={styles.rephraseBannerUndoText}>Undo</Text>
+                    <MaterialCommunityIcons
+                      name="undo"
+                      size={14}
+                      color="#52645A"
+                    />
+                    <Text style={styles.undoText}>
+                      Undo
+                    </Text>
                   </TouchableOpacity>
                 ) : null}
 
                 <TouchableOpacity
-                  onPress={() => setShowRephraseBanner(false)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  activeOpacity={0.7}
+                  onPress={() =>
+                    setShowRephraseBanner(false)
+                  }
                 >
-                  <Feather name="x" size={14} color="#777777" />
+                  <Feather
+                    name="x"
+                    size={15}
+                    color="#79847D"
+                  />
                 </TouchableOpacity>
               </View>
             </View>
           ) : null}
 
-          {/* Voice Memo Indicator (if toggled) */}
+          {/* ATTACHMENT STATUS */}
           {isRecordingMemo ? (
-            <View style={styles.voiceMemoBanner}>
-              <MaterialCommunityIcons name="microphone" size={18} color="#E56338" />
-              <Text style={styles.voiceMemoText}>Voice note attached (0:24)</Text>
-              <TouchableOpacity onPress={() => setIsRecordingMemo(false)}>
-                <Feather name="x" size={16} color="#777" />
+            <View style={styles.attachmentBanner}>
+              <MaterialCommunityIcons
+                name="microphone"
+                size={18}
+                color="#B76C40"
+              />
+              <Text style={styles.attachmentText}>
+                Voice note attached (0:24)
+              </Text>
+              <TouchableOpacity
+                onPress={() => setIsRecordingMemo(false)}
+              >
+                <Feather
+                  name="x"
+                  size={16}
+                  color="#777"
+                />
               </TouchableOpacity>
             </View>
           ) : null}
 
-          {/* Attached Polaroid Badge (if selected) */}
           {selectedPolaroid ? (
-            <View style={styles.polaroidAttachmentBadge}>
-              <MaterialCommunityIcons name="image-outline" size={18} color="#2AB565" />
-              <Text style={styles.polaroidAttachmentText}>
-                Photo: {selectedPolaroid.caption}
+            <View style={styles.attachmentBanner}>
+              <MaterialCommunityIcons
+                name="image-outline"
+                size={18}
+                color="#347B5C"
+              />
+              <Text style={styles.attachmentText}>
+                {selectedPolaroid.caption}
               </Text>
-              <TouchableOpacity onPress={() => setSelectedPolaroid(null)}>
-                <Feather name="x" size={16} color="#777" />
+              <TouchableOpacity
+                onPress={() => setSelectedPolaroid(null)}
+              >
+                <Feather
+                  name="x"
+                  size={16}
+                  color="#777"
+                />
               </TouchableOpacity>
             </View>
           ) : null}
 
-          {/* Main Multiline Writing Input */}
-          <TextInput
-            ref={inputRef}
-            style={[
-              styles.textInput,
-              {
-                fontFamily: activeFontFamily,
-                fontSize: activeFontSize,
-                lineHeight: activeLineHeight,
-                textAlign: textAlignment,
-              },
-            ]}
-            placeholder="Write something..."
-            placeholderTextColor="#B0B0B0"
-            multiline
-            scrollEnabled={false}
-            value={content}
-            onChangeText={setContent}
-            textAlignVertical="top"
-            selectionColor="#45C49A"
-            autoFocus
-          />
+          {/* PLAIN JOURNAL */}
+          {journalMode === 'plain' ? (
+            <View style={styles.plainWritingSection}>
+              <View style={styles.writingHeading}>
+                <Text style={styles.writingEyebrow}>
+                  YOUR THOUGHTS
+                </Text>
+                <Text style={styles.writingHint}>
+                  Take your time. There is no right way to write.
+                </Text>
+              </View>
 
-          {/* Metadata Rows: Mood, Weather, Tag, Character Count */}
-          <View style={styles.metadataSection}>
-            {/* Mood Row */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setActivePicker('mood')}
-              style={styles.metaRow}
-            >
-              <MaterialCommunityIcons
-                name="emoticon-happy-outline"
-                size={22}
-                color={selectedMood ? '#45C49A' : '#6E7370'}
-              />
-              <Text
+              <TextInput
+                ref={inputRef}
                 style={[
-                  styles.metaRowLabel,
-                  selectedMood ? styles.metaRowLabelActive : null,
+                  styles.plainTextInput,
+                  {
+                    fontFamily: activeFontFamily,
+                    fontSize: activeFontSize,
+                    lineHeight: activeLineHeight,
+                    textAlign: textAlignment,
+                  },
                 ]}
-              >
-                {selectedMood
-                  ? `Mood · ${
-                      AVAILABLE_MOODS.find((m) => m.id === selectedMood)?.emoji
-                    } ${
-                      AVAILABLE_MOODS.find((m) => m.id === selectedMood)?.label
-                    }`
-                  : 'Mood'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Weather Row */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setActivePicker('weather')}
-              style={styles.metaRow}
-            >
-              <MaterialCommunityIcons
-                name="weather-sunny"
-                size={22}
-                color={selectedWeather ? '#F2A33A' : '#6E7370'}
+                placeholder="Start writing your thoughts here..."
+                placeholderTextColor="#A5ACA7"
+                multiline
+                scrollEnabled={false}
+                value={content}
+                onChangeText={setContent}
+                textAlignVertical="top"
+                selectionColor="#4B9879"
+                autoFocus
               />
-              <Text
-                style={[
-                  styles.metaRowLabel,
-                  selectedWeather ? styles.metaRowLabelActive : null,
-                ]}
-              >
-                {selectedWeather
-                  ? `Weather · ${
-                      AVAILABLE_WEATHER.find((w) => w.id === selectedWeather)?.emoji
-                    } ${
-                      AVAILABLE_WEATHER.find((w) => w.id === selectedWeather)?.label
-                    }`
-                  : 'Weather'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Tag Row */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => setActivePicker('tags')}
-              style={styles.metaRow}
-            >
-              <MaterialCommunityIcons
-                name="bookmark-outline"
-                size={22}
-                color={selectedTags.length > 0 ? '#6E3DE6' : '#6E7370'}
-              />
-              <Text
-                style={[
-                  styles.metaRowLabel,
-                  selectedTags.length > 0 ? styles.metaRowLabelActive : null,
-                ]}
-              >
-                {selectedTags.length > 0
-                  ? selectedTags.map((t) => `#${t}`).join(' ')
-                  : 'Tag'}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Character Count Row */}
-            <View style={styles.metaRow}>
-              <MaterialCommunityIcons
-                name="alpha-w-box-outline"
-                size={22}
-                color="#6E7370"
-              />
-              <Text style={styles.metaRowLabel}>{charCount} chars</Text>
             </View>
+          ) : (
+            /* DAILY JOURNAL */
+            <View style={styles.dailySection}>
+              <View style={styles.dailyIntro}>
+                <View style={styles.dailyIntroIcon}>
+                  <MaterialCommunityIcons
+                    name="notebook-outline"
+                    size={22}
+                    color="#547365"
+                  />
+                </View>
+
+                <View style={styles.dailyIntroText}>
+                  <Text style={styles.dailyIntroTitle}>
+                    A little reflection
+                  </Text>
+                  <Text style={styles.dailyIntroSubtitle}>
+                    Four small prompts to help you understand your day.
+                  </Text>
+                </View>
+              </View>
+
+              {DAILY_FIELDS.map(renderDailyField)}
+            </View>
+          )}
+
+          {/* METADATA */}
+          {renderMetadata()}
+
+          {/* EXTRA ATTACHMENTS */}
+          <View style={styles.extraSection}>
+            <Text style={styles.sectionEyebrow}>
+              PERSONALIZE YOUR ENTRY
+            </Text>
+
+            <View style={styles.extraToolsGrid}>
+              <TouchableOpacity
+                style={styles.extraTool}
+                onPress={() => setActivePicker('font')}
+              >
+                <View style={styles.extraToolIcon}>
+                  <Feather
+                    name="type"
+                    size={19}
+                    color="#547365"
+                  />
+                </View>
+                <Text style={styles.extraToolTitle}>
+                  Typography
+                </Text>
+                <Text style={styles.extraToolSubtitle}>
+                  {selectedFont}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.extraTool}
+                onPress={() => setActivePicker('theme')}
+              >
+                <View style={styles.extraToolIcon}>
+                  <MaterialCommunityIcons
+                    name="palette-outline"
+                    size={20}
+                    color="#547365"
+                  />
+                </View>
+                <Text style={styles.extraToolTitle}>
+                  Theme
+                </Text>
+                <Text style={styles.extraToolSubtitle}>
+                  {activeTheme.name}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.extraTool}
+                onPress={cycleAlignment}
+              >
+                <View style={styles.extraToolIcon}>
+                  <MaterialCommunityIcons
+                    name={
+                      textAlignment === 'center'
+                        ? 'format-align-center'
+                        : textAlignment === 'right'
+                          ? 'format-align-right'
+                          : 'format-align-left'
+                    }
+                    size={20}
+                    color="#547365"
+                  />
+                </View>
+                <Text style={styles.extraToolTitle}>
+                  Alignment
+                </Text>
+                <Text style={styles.extraToolSubtitle}>
+                  {textAlignment}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.extraTool}
+                onPress={() => setActivePicker('polaroid')}
+              >
+                <View style={styles.extraToolIcon}>
+                  <MaterialCommunityIcons
+                    name="image-outline"
+                    size={20}
+                    color="#547365"
+                  />
+                </View>
+                <Text style={styles.extraToolTitle}>
+                  Photo
+                </Text>
+                <Text style={styles.extraToolSubtitle}>
+                  {selectedPolaroid ? 'Attached' : 'Add photo'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.extraTool}
+                onPress={() =>
+                  setIsRecordingMemo((previous) => !previous)
+                }
+              >
+                <View style={styles.extraToolIcon}>
+                  <MaterialCommunityIcons
+                    name={
+                      isRecordingMemo
+                        ? 'microphone'
+                        : 'microphone-outline'
+                    }
+                    size={20}
+                    color={
+                      isRecordingMemo ? '#B76C40' : '#547365'
+                    }
+                  />
+                </View>
+                <Text style={styles.extraToolTitle}>
+                  Voice note
+                </Text>
+                <Text style={styles.extraToolSubtitle}>
+                  {isRecordingMemo ? 'Attached' : 'Add note'}
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.extraTool}
+                onPress={handleInsertTimestamp}
+              >
+                <View style={styles.extraToolIcon}>
+                  <Feather
+                    name="clock"
+                    size={19}
+                    color="#547365"
+                  />
+                </View>
+                <Text style={styles.extraToolTitle}>
+                  Timestamp
+                </Text>
+                <Text style={styles.extraToolSubtitle}>
+                  Insert time
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          <View style={styles.bottomNote}>
+            <Feather
+              name="lock"
+              size={13}
+              color="#9BA59E"
+            />
+            <Text style={styles.bottomNoteText}>
+              A private space for your thoughts.
+            </Text>
           </View>
         </ScrollView>
 
-        {/* Bottom Toolbar Toolstrip matching screenshot */}
+        {/* BOTTOM ACTION BAR */}
         <View
           style={[
-            styles.bottomToolbar,
-            { paddingBottom: Math.max(insets.bottom, 12) },
+            styles.bottomBar,
+            {
+              paddingBottom: Math.max(insets.bottom, 12),
+            },
           ]}
         >
-          {/* 1. Typography / Font Tool */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => setActivePicker('font')}
-            style={styles.toolItem}
-          >
-            <Text style={styles.fontToolText}>A</Text>
-          </TouchableOpacity>
+          <View style={styles.bottomBarInfo}>
+            <Text style={styles.bottomBarLabel}>
+              {journalMode === 'daily'
+                ? 'DAILY JOURNAL'
+                : 'PLAIN JOURNAL'}
+            </Text>
+            <Text style={styles.bottomBarCount}>
+              {charCount} characters
+            </Text>
+          </View>
 
-          {/* 2. Theme / Pattern Tool (Striped square) */}
           <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => setActivePicker('theme')}
-            style={styles.toolItem}
+            style={styles.bottomSaveButton}
+            onPress={handleSave}
+            activeOpacity={0.85}
           >
-            <MaterialCommunityIcons
-              name="texture-box"
-              size={24}
-              color="#333333"
+            <Text style={styles.bottomSaveText}>
+              {isEditing ? 'Update entry' : 'Save entry'}
+            </Text>
+            <Feather
+              name="arrow-right"
+              size={17}
+              color="#FFFFFF"
             />
-          </TouchableOpacity>
-
-          {/* 3. Alignment Tool */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={cycleAlignment}
-            style={styles.toolItem}
-          >
-            <MaterialCommunityIcons
-              name={
-                textAlignment === 'center'
-                  ? 'format-align-center'
-                  : textAlignment === 'right'
-                  ? 'format-align-right'
-                  : 'format-align-left'
-              }
-              size={23}
-              color="#333333"
-            />
-          </TouchableOpacity>
-
-          {/* 4. Photo / Media Tool */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => setActivePicker('polaroid')}
-            style={styles.toolItem}
-          >
-            <MaterialCommunityIcons
-              name="image-outline"
-              size={24}
-              color={selectedPolaroid ? '#45C49A' : '#333333'}
-            />
-          </TouchableOpacity>
-
-          {/* 5. Voice Memo Tool */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => setIsRecordingMemo((prev) => !prev)}
-            style={styles.toolItem}
-          >
-            <MaterialCommunityIcons
-              name={isRecordingMemo ? 'microphone' : 'microphone-outline'}
-              size={24}
-              color={isRecordingMemo ? '#E56338' : '#333333'}
-            />
-          </TouchableOpacity>
-
-          {/* 6. Clock / Timestamp Tool */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={handleInsertTimestamp}
-            style={styles.toolItem}
-          >
-            <MaterialCommunityIcons
-              name="clock-outline"
-              size={23}
-              color="#333333"
-            />
-          </TouchableOpacity>
-
-          {/* 7. Rephrase AI Tool */}
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => handleRephrase()}
-            disabled={isRephrasing}
-            style={styles.toolItem}
-            accessibilityRole="button"
-            accessibilityLabel="Rephrase text"
-          >
-            {isRephrasing ? (
-              <ActivityIndicator size="small" color="#45C49A" />
-            ) : (
-              <MaterialCommunityIcons
-                name="auto-fix"
-                size={23}
-                color="#333333"
-              />
-            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
 
-      {/* Interactive Picker Modal Sheet */}
+      {/* PICKER MODAL */}
       <Modal
         visible={activePicker !== null}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setActivePicker(null)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setActivePicker(null)}
-        >
+        <View style={styles.modalOverlay}>
           <TouchableOpacity
+            style={styles.modalBackdrop}
             activeOpacity={1}
-            style={styles.modalSheet}
-            onPress={(e) => e.stopPropagation()}
+            onPress={() => setActivePicker(null)}
+          />
+
+          <View
+            style={[
+              styles.modalSheet,
+              {
+                paddingBottom: Math.max(insets.bottom, 24),
+              },
+            ]}
           >
-            {/* Sheet Handle */}
             <View style={styles.sheetHandle} />
 
-            {/* Mood Picker */}
-            {activePicker === 'mood' ? (
-              <View>
-                <View style={styles.sheetHeaderRow}>
-                  <Text style={styles.sheetTitle}>How are you feeling?</Text>
-                  {selectedMood ? (
-                    <TouchableOpacity onPress={() => setSelectedMood(null)}>
-                      <Text style={styles.sheetClearText}>Clear</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                <View style={styles.chipGrid}>
-                  {AVAILABLE_MOODS.map((item) => {
-                    const isSelected = selectedMood === item.id;
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        activeOpacity={0.75}
-                        onPress={() => {
-                          setSelectedMood(isSelected ? null : item.id);
-                          setActivePicker(null);
-                        }}
-                        style={[
-                          styles.moodChip,
-                          isSelected ? styles.moodChipSelected : null,
-                        ]}
-                      >
-                        <Text style={styles.moodEmoji}>{item.emoji}</Text>
-                        <Text
-                          style={[
-                            styles.moodText,
-                            isSelected ? styles.moodTextSelected : null,
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            {/* Weather Picker */}
-            {activePicker === 'weather' ? (
-              <View>
-                <View style={styles.sheetHeaderRow}>
-                  <Text style={styles.sheetTitle}>Today's Weather</Text>
-                  {selectedWeather ? (
-                    <TouchableOpacity onPress={() => setSelectedWeather(null)}>
-                      <Text style={styles.sheetClearText}>Clear</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                <View style={styles.chipGrid}>
-                  {AVAILABLE_WEATHER.map((item) => {
-                    const isSelected = selectedWeather === item.id;
-                    return (
-                      <TouchableOpacity
-                        key={item.id}
-                        activeOpacity={0.75}
-                        onPress={() => {
-                          setSelectedWeather(isSelected ? null : item.id);
-                          setActivePicker(null);
-                        }}
-                        style={[
-                          styles.weatherChip,
-                          isSelected ? styles.weatherChipSelected : null,
-                        ]}
-                      >
-                        <Text style={styles.weatherEmoji}>{item.emoji}</Text>
-                        <Text
-                          style={[
-                            styles.weatherText,
-                            isSelected ? styles.weatherTextSelected : null,
-                          ]}
-                        >
-                          {item.label}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            {/* Tag Picker */}
-            {activePicker === 'tags' ? (
-              <View>
-                <View style={styles.sheetHeaderRow}>
-                  <Text style={styles.sheetTitle}>Select Tags</Text>
-                  {selectedTags.length > 0 ? (
-                    <TouchableOpacity onPress={() => setSelectedTags([])}>
-                      <Text style={styles.sheetClearText}>Clear All</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                <View style={styles.tagWrap}>
-                  {PRESET_TAGS.map((tag) => {
-                    const isSelected = selectedTags.includes(tag);
-                    return (
-                      <TouchableOpacity
-                        key={tag}
-                        activeOpacity={0.75}
-                        onPress={() => toggleTag(tag)}
-                        style={[
-                          styles.tagChip,
-                          isSelected ? styles.tagChipSelected : null,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.tagText,
-                            isSelected ? styles.tagTextSelected : null,
-                          ]}
-                        >
-                          #{tag}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            {/* Typography / Font Picker */}
-            {activePicker === 'font' ? (
-              <View>
-                <Text style={styles.sheetTitle}>Typography</Text>
-                <Text style={styles.sheetSubheading}>Font Style</Text>
-                <View style={styles.fontOptionsRow}>
-                  <TouchableOpacity
-                    onPress={() => setSelectedFont('system')}
-                    style={[
-                      styles.fontOptionCard,
-                      selectedFont === 'system' ? styles.fontOptionCardSelected : null,
-                    ]}
-                  >
-                    <Text style={styles.fontOptionSystemText}>Modern Sans</Text>
-                    <Text style={styles.fontOptionSubtext}>Clean & Minimal</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => setSelectedFont('serif')}
-                    style={[
-                      styles.fontOptionCard,
-                      selectedFont === 'serif' ? styles.fontOptionCardSelected : null,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.fontOptionSerifText,
-                        fontsLoaded ? { fontFamily: 'PlayfairDisplay_700Bold' } : null,
-                      ]}
-                    >
-                      Playfair
-                    </Text>
-                    <Text style={styles.fontOptionSubtext}>Classic Editorial</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    onPress={() => setSelectedFont('handwriting')}
-                    style={[
-                      styles.fontOptionCard,
-                      selectedFont === 'handwriting' ? styles.fontOptionCardSelected : null,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.fontOptionHandwritingText,
-                        fontsLoaded ? { fontFamily: 'Caveat_600SemiBold' } : null,
-                      ]}
-                    >
-                      Caveat
-                    </Text>
-                    <Text style={styles.fontOptionSubtext}>Handwritten</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={[styles.sheetSubheading, { marginTop: 16 }]}>
-                  Text Size
-                </Text>
-                <View style={styles.fontSizeRow}>
-                  {(['regular', 'large', 'title'] as const).map((level) => (
-                    <TouchableOpacity
-                      key={level}
-                      onPress={() => setFontSizeLevel(level)}
-                      style={[
-                        styles.sizeButton,
-                        fontSizeLevel === level ? styles.sizeButtonSelected : null,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.sizeButtonText,
-                          fontSizeLevel === level ? styles.sizeButtonTextSelected : null,
-                        ]}
-                      >
-                        {level === 'regular'
-                          ? 'Standard (18)'
-                          : level === 'large'
-                          ? 'Large (20)'
-                          : 'Headline (24)'}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-            ) : null}
-
-            {/* Theme Picker */}
-            {activePicker === 'theme' ? (
-              <View>
-                <Text style={styles.sheetTitle}>Card Theme & Color</Text>
-                <View style={styles.themeRow}>
-                  {COLOR_THEMES.map((theme) => {
-                    const isSelected = activeTheme.id === theme.id;
-                    return (
-                      <TouchableOpacity
-                        key={theme.id}
-                        activeOpacity={0.8}
-                        onPress={() => {
-                          setActiveTheme(theme);
-                          setActivePicker(null);
-                        }}
-                        style={[
-                          styles.themeCircleOuter,
-                          isSelected ? styles.themeCircleOuterSelected : null,
-                        ]}
-                      >
-                        <View
-                          style={[
-                            styles.themeCircleInner,
-                            { backgroundColor: theme.previewColor },
-                            theme.id === 'clean-white'
-                              ? { borderWidth: 1, borderColor: '#D9D9D9' }
-                              : null,
-                          ]}
-                        />
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            {/* Polaroid Photo Picker */}
-            {activePicker === 'polaroid' ? (
-              <View>
-                <View style={styles.sheetHeaderRow}>
-                  <Text style={styles.sheetTitle}>Attach Photo Polaroid</Text>
-                  {selectedPolaroid ? (
-                    <TouchableOpacity onPress={() => setSelectedPolaroid(null)}>
-                      <Text style={styles.sheetClearText}>Remove</Text>
-                    </TouchableOpacity>
-                  ) : null}
-                </View>
-                <View style={styles.polaroidOptionsRow}>
-                  {SAMPLE_POLAROIDS.map((p) => {
-                    const isSelected =
-                      selectedPolaroid?.caption === p.caption;
-                    return (
-                      <TouchableOpacity
-                        key={p.id}
-                        activeOpacity={0.85}
-                        onPress={() => {
-                          setSelectedPolaroid(isSelected ? null : p);
-                          setActivePicker(null);
-                        }}
-                        style={[
-                          styles.polaroidOptionCard,
-                          isSelected ? styles.polaroidOptionCardSelected : null,
-                        ]}
-                      >
-                        <Text style={styles.polaroidOptionCaption}>
-                          {p.caption}
-                        </Text>
-                        <Text style={styles.polaroidOptionSub}>
-                          {isSelected ? '✓ Attached' : 'Tap to attach'}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-
-            {/* Rephrase Tone Picker */}
-            {activePicker === 'rephraseTone' ? (
-              <View>
-                <View style={styles.sheetHeaderRow}>
-                  <Text style={styles.sheetTitle}>Rephrase Style & Tone</Text>
-                  <TouchableOpacity
-                    onPress={() => {
-                      handleRephrase(selectedTone);
-                      setActivePicker(null);
-                    }}
-                  >
-                    <Text style={styles.sheetApplyText}>Rephrase</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.toneOptionsList}>
-                  {REPHRASE_TONES.map((tone) => {
-                    const isSelected = selectedTone === tone.id;
-                    return (
-                      <TouchableOpacity
-                        key={tone.id}
-                        activeOpacity={0.75}
-                        onPress={() => {
-                          setSelectedTone(tone.id);
-                          handleRephrase(tone.id);
-                          setActivePicker(null);
-                        }}
-                        style={[
-                          styles.toneOptionCard,
-                          isSelected ? styles.toneOptionCardSelected : null,
-                        ]}
-                      >
-                        <Text style={styles.toneEmoji}>{tone.emoji}</Text>
-                        <View style={styles.toneTextColumn}>
-                          <Text
-                            style={[
-                              styles.toneName,
-                              isSelected ? styles.toneNameSelected : null,
-                            ]}
-                          >
-                            {tone.name}
-                          </Text>
-                          <Text style={styles.toneDescription}>
-                            {tone.description}
-                          </Text>
-                        </View>
-                        {isSelected ? (
-                          <Feather name="check" size={18} color="#2F855A" />
-                        ) : null}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
-          </TouchableOpacity>
-        </TouchableOpacity>
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {renderPickerContent()}
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1102,528 +1928,831 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#F8FAF8',
   },
+
   header: {
+    minHeight: 74,
+    paddingHorizontal: 19,
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEF1EE',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingBottom: 14,
-    backgroundColor: '#FFFFFF',
   },
+
   closeButton: {
-    padding: 6,
+    width: 39,
+    height: 39,
+    borderRadius: 13,
+    backgroundColor: '#F3F5F3',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  headerRightActions: {
+
+  headerTitleContainer: {
+    flex: 1,
+    marginLeft: 12,
+  },
+
+  headerTitle: {
+    fontSize: 16,
+    color: '#26332D',
+    fontWeight: '700',
+  },
+
+  headerSubtitle: {
+    marginTop: 2,
+    fontSize: 11,
+    color: '#929C95',
+  },
+
+  headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 9,
+    gap: 8,
   },
+
   rephraseButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#EDF8F3',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: '#C5EAD9',
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 10,
+    backgroundColor: '#EFF6F1',
   },
-  rephraseButtonDisabled: {
-    opacity: 0.65,
-  },
+
   rephraseButtonText: {
-    color: '#24744E',
-    fontSize: 14,
-    fontWeight: '600',
-    letterSpacing: -0.1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#347B5C',
   },
+
   saveButton: {
-    backgroundColor: '#4ECB9A',
-    paddingHorizontal: 22,
-    paddingVertical: 8.5,
-    borderRadius: 11,
-    shadowColor: '#4ECB9A',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 2,
+    backgroundColor: '#347B5C',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 10,
   },
+
   saveButtonText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: -0.2,
+    fontSize: 13,
+    fontWeight: '700',
   },
+
   keyboardContainer: {
     flex: 1,
   },
+
   scrollArea: {
     flex: 1,
   },
+
   scrollContent: {
-    paddingHorizontal: 22,
-    paddingTop: 14,
-    paddingBottom: 24,
-    flexGrow: 1,
+    paddingHorizontal: 20,
+    paddingTop: 23,
+    paddingBottom: 35,
+  },
+
+  dateSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 25,
+  },
+
+  dateDayNumber: {
+    fontSize: 47,
+    fontWeight: '700',
+    color: '#26332D',
+    letterSpacing: -2,
+    lineHeight: 54,
+  },
+
+  dateDetails: {
+    marginLeft: 12,
+  },
+
+  dateWeekday: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#35433B',
+  },
+
+  dateMonth: {
+    fontSize: 12,
+    color: '#8B968E',
+    marginTop: 3,
+  },
+
+  dateRight: {
+    marginLeft: 'auto',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+
+  dateDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#5B9B79',
+  },
+
+  dateLabel: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#87938B',
+    letterSpacing: 1,
+  },
+
+  modeContainer: {
+    marginBottom: 23,
+  },
+
+  modeHeading: {
+    marginBottom: 12,
+  },
+
+  modeHeadingTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2D3932',
+  },
+
+  modeHeadingSubtitle: {
+    fontSize: 12,
+    color: '#8B958E',
+    marginTop: 4,
+  },
+
+  modeSwitch: {
+    flexDirection: 'row',
+    backgroundColor: '#EDF1ED',
+    padding: 4,
+    borderRadius: 13,
+    gap: 4,
+  },
+
+  modeOption: {
+    flex: 1,
+    minHeight: 43,
+    borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+
+  modeOptionActive: {
+    backgroundColor: '#347B5C',
+  },
+
+  modeOptionText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#68736C',
+  },
+
+  modeOptionTextActive: {
+    color: '#FFFFFF',
+  },
+
+  rephraseBanner: {
+    backgroundColor: '#EEF6F0',
+    borderRadius: 11,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
   },
-  dateRow: {
+
+  rephraseBannerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    gap: 7,
+    flex: 1,
   },
-  dayNumberText: {
-    fontSize: 46,
+
+  rephraseBannerText: {
+    fontSize: 12,
     fontWeight: '600',
-    color: '#222222',
-    letterSpacing: -1,
-    marginRight: 10,
-    includeFontPadding: false,
+    color: '#347B5C',
   },
-  dateMetaColumn: {
+
+  rephraseActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+
+  rephraseActionText: {
+    color: '#347B5C',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  undoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+
+  undoText: {
+    color: '#52645A',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  attachmentBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8EDE8',
+    borderRadius: 10,
+    padding: 11,
+    marginBottom: 12,
+  },
+
+  attachmentText: {
+    flex: 1,
+    color: '#52645A',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+
+  plainWritingSection: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E9EEE9',
+    borderRadius: 17,
+    padding: 18,
+    marginBottom: 22,
+    minHeight: 300,
+  },
+
+  writingHeading: {
+    marginBottom: 17,
+  },
+
+  writingEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#71927E',
+    letterSpacing: 1.3,
+  },
+
+  writingHint: {
+    fontSize: 11,
+    color: '#A0AAA3',
+    marginTop: 5,
+  },
+
+  plainTextInput: {
+    color: '#28362E',
+    minHeight: 235,
+    padding: 0,
+    textAlignVertical: 'top',
+  },
+
+  dailySection: {
+    marginBottom: 22,
+  },
+
+  dailyIntro: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 11,
+  },
+
+  dailyIntroIcon: {
+    width: 43,
+    height: 43,
+    borderRadius: 13,
+    backgroundColor: '#EAF2EC',
     justifyContent: 'center',
+    alignItems: 'center',
   },
-  dayOfWeekText: {
-    fontSize: 13.5,
-    fontWeight: '600',
-    color: '#333333',
+
+  dailyIntroText: {
+    flex: 1,
+  },
+
+  dailyIntroTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#2D3932',
+  },
+
+  dailyIntroSubtitle: {
+    fontSize: 11,
     lineHeight: 16,
+    color: '#929D95',
+    marginTop: 3,
   },
-  yearMonthText: {
-    fontSize: 11.5,
-    fontWeight: '400',
-    color: '#7E8480',
-    marginTop: 2,
+
+  dailyFieldCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8EDE8',
+    borderRadius: 15,
+    padding: 15,
+    marginBottom: 12,
   },
-  voiceMemoBanner: {
+
+  dailyFieldHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF4EE',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    marginBottom: 13,
+  },
+
+  dailyFieldIcon: {
+    width: 35,
+    height: 35,
     borderRadius: 10,
-    marginBottom: 12,
-    gap: 8,
-  },
-  voiceMemoText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#E56338',
-    fontWeight: '500',
-  },
-  polaroidAttachmentBadge: {
-    flexDirection: 'row',
+    backgroundColor: '#EFF5F0',
+    justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F0FAF4',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    marginBottom: 12,
-    gap: 8,
   },
-  polaroidAttachmentText: {
+
+  dailyFieldHeading: {
     flex: 1,
+    marginLeft: 10,
+  },
+
+  dailyFieldTitle: {
     fontSize: 13,
-    color: '#2AB565',
-    fontWeight: '500',
+    fontWeight: '700',
+    color: '#354239',
   },
-  textInput: {
-    color: '#222222',
-    paddingTop: 0,
-    paddingBottom: 24,
-    minHeight: 220,
-    flex: 1,
+
+  dailyFieldSubtitle: {
+    fontSize: 10,
+    color: '#939D96',
+    marginTop: 3,
   },
-  metadataSection: {
-    paddingTop: 12,
-    paddingBottom: 8,
-    gap: 16,
+
+  dailyFieldNumber: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#BBC5BD',
   },
+
+  dailyFieldInput: {
+    minHeight: 85,
+    padding: 0,
+    color: '#344239',
+    textAlignVertical: 'top',
+  },
+
+  metadataCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8EDE8',
+    borderRadius: 15,
+    paddingHorizontal: 15,
+    paddingTop: 15,
+    paddingBottom: 5,
+    marginBottom: 24,
+  },
+
+  sectionEyebrow: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#829087',
+    letterSpacing: 1.2,
+    marginBottom: 11,
+  },
+
   metaRow: {
+    minHeight: 49,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingVertical: 2,
+    gap: 10,
   },
-  metaRowLabel: {
-    fontSize: 14.5,
-    color: '#6E7370',
-    fontWeight: '400',
+
+  metaIcon: {
+    width: 29,
+    alignItems: 'center',
   },
-  metaRowLabelActive: {
-    color: '#222222',
+
+  metaLabel: {
+    flex: 1,
+    fontSize: 12,
+    color: '#56635A',
+    fontWeight: '600',
+  },
+
+  metaValue: {
+    maxWidth: '45%',
+    fontSize: 11,
+    color: '#8A968E',
     fontWeight: '500',
+    textAlign: 'right',
   },
-  bottomToolbar: {
-    backgroundColor: '#EDF5F0',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0, 0, 0, 0.04)',
+
+  metaDivider: {
+    height: 1,
+    backgroundColor: '#F0F2F0',
+  },
+
+  extraSection: {
+    marginBottom: 24,
+  },
+
+  extraToolsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    paddingTop: 12,
-    paddingHorizontal: 14,
+    flexWrap: 'wrap',
+    gap: 10,
   },
-  toolItem: {
-    padding: 8,
+
+  extraTool: {
+    width: '31%',
+    flexGrow: 1,
+    minHeight: 106,
+    padding: 11,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E8EDE8',
+    borderRadius: 13,
+  },
+
+  extraToolIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: '#EFF5F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 9,
+  },
+
+  extraToolTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#435148',
+  },
+
+  extraToolSubtitle: {
+    fontSize: 10,
+    color: '#9AA49D',
+    marginTop: 4,
+  },
+
+  bottomNote: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 42,
+    gap: 7,
+    marginTop: 5,
+    marginBottom: 8,
   },
-  fontToolText: {
-    fontSize: 21,
-    fontWeight: '600',
-    color: '#333333',
+
+  bottomNoteText: {
+    fontSize: 10,
+    color: '#9BA59E',
   },
+
+  bottomBar: {
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#E9EEE9',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+
+  bottomBarInfo: {
+    flex: 1,
+  },
+
+  bottomBarLabel: {
+    fontSize: 9,
+    color: '#7F8E83',
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+
+  bottomBarCount: {
+    fontSize: 11,
+    color: '#A0AAA3',
+    marginTop: 4,
+  },
+
+  bottomSaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#347B5C',
+    paddingHorizontal: 19,
+    paddingVertical: 13,
+    borderRadius: 11,
+  },
+
+  bottomSaveText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.45)',
     justifyContent: 'flex-end',
   },
+
+  modalBackdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(20, 30, 24, 0.4)',
+  },
+
   modalSheet: {
     backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 22,
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    paddingHorizontal: 21,
     paddingTop: 12,
-    paddingBottom: 36,
-    maxHeight: '60%',
+    paddingBottom: 24,
+    maxHeight: '75%',
   },
+
   sheetHandle: {
     width: 38,
-    height: 4.5,
-    backgroundColor: '#DDD8E0',
+    height: 4,
     borderRadius: 3,
+    backgroundColor: '#DDE3DE',
     alignSelf: 'center',
-    marginBottom: 18,
+    marginBottom: 20,
   },
+
   sheetHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 16,
+    marginBottom: 17,
   },
+
   sheetTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#222222',
-    marginBottom: 4,
+    color: '#2D3932',
+    marginBottom: 7,
   },
+
+  sheetDescription: {
+    fontSize: 12,
+    lineHeight: 18,
+    color: '#929D95',
+    marginBottom: 17,
+  },
+
   sheetClearText: {
-    fontSize: 14,
-    color: '#E56338',
-    fontWeight: '600',
+    fontSize: 12,
+    color: '#B56C53',
+    fontWeight: '700',
   },
-  sheetSubheading: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#777777',
-    marginTop: 10,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
+
   chipGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 4,
-  },
-  moodChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F7',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    gap: 6,
-  },
-  moodChipSelected: {
-    backgroundColor: '#E0F8EE',
-    borderWidth: 1.5,
-    borderColor: '#45C49A',
-  },
-  moodEmoji: {
-    fontSize: 18,
-  },
-  moodText: {
-    fontSize: 14,
-    color: '#444444',
-    fontWeight: '500',
-  },
-  moodTextSelected: {
-    color: '#157351',
-    fontWeight: '700',
-  },
-  weatherChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#F5F5F7',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
-    gap: 6,
-  },
-  weatherChipSelected: {
-    backgroundColor: '#FFF2DF',
-    borderWidth: 1.5,
-    borderColor: '#F2A33A',
-  },
-  weatherEmoji: {
-    fontSize: 18,
-  },
-  weatherText: {
-    fontSize: 14,
-    color: '#444444',
-    fontWeight: '500',
-  },
-  weatherTextSelected: {
-    color: '#A15903',
-    fontWeight: '700',
-  },
-  tagWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 9,
-    marginTop: 4,
+    marginBottom: 15,
   },
-  tagChip: {
-    backgroundColor: '#F5F5F7',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+
+  choiceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    backgroundColor: '#F3F5F3',
+    borderRadius: 10,
   },
-  tagChipSelected: {
-    backgroundColor: '#ECE4FD',
-    borderWidth: 1.5,
-    borderColor: '#6E3DE6',
+
+  choiceChipSelected: {
+    backgroundColor: '#EAF4ED',
+    borderWidth: 1,
+    borderColor: '#8DB59A',
   },
-  tagText: {
-    fontSize: 13.5,
-    color: '#555555',
-    fontWeight: '500',
+
+  choiceEmoji: {
+    fontSize: 16,
   },
-  tagTextSelected: {
-    color: '#6E3DE6',
-    fontWeight: '700',
+
+  choiceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#56635A',
   },
+
+  choiceTextSelected: {
+    color: '#347B5C',
+  },
+
+  sheetSubheading: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#87938B',
+    letterSpacing: 1,
+    marginTop: 17,
+    marginBottom: 10,
+  },
+
   fontOptionsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 9,
   },
-  fontOptionCard: {
+
+  fontOption: {
     flex: 1,
-    backgroundColor: '#F6F6F8',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
-    borderRadius: 14,
     alignItems: 'center',
+    paddingVertical: 15,
+    paddingHorizontal: 5,
+    backgroundColor: '#F4F6F4',
+    borderRadius: 12,
   },
-  fontOptionCardSelected: {
-    backgroundColor: '#EAE6FF',
-    borderWidth: 1.5,
-    borderColor: '#6E3DE6',
+
+  fontOptionSelected: {
+    backgroundColor: '#EAF4ED',
+    borderWidth: 1,
+    borderColor: '#8DB59A',
   },
-  fontOptionSystemText: {
-    fontSize: 14.5,
-    fontWeight: '600',
-    color: '#222',
-  },
-  fontOptionSerifText: {
-    fontSize: 15,
+
+  fontOptionTitle: {
+    fontSize: 12,
     fontWeight: '700',
-    color: '#222',
+    color: '#3C4A41',
   },
-  fontOptionHandwritingText: {
-    fontSize: 19,
-    fontWeight: '600',
-    color: '#222',
+
+  fontOptionSubtitle: {
+    fontSize: 9,
+    color: '#929D95',
+    marginTop: 4,
   },
-  fontOptionSubtext: {
-    fontSize: 10.5,
-    color: '#777',
-    marginTop: 3,
-  },
+
   fontSizeRow: {
     flexDirection: 'row',
     gap: 8,
   },
+
   sizeButton: {
     flex: 1,
-    backgroundColor: '#F6F6F8',
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingVertical: 11,
     alignItems: 'center',
+    backgroundColor: '#F3F5F3',
+    borderRadius: 10,
   },
+
   sizeButtonSelected: {
-    backgroundColor: '#EAE6FF',
-    borderWidth: 1.5,
-    borderColor: '#6E3DE6',
+    backgroundColor: '#EAF4ED',
+    borderWidth: 1,
+    borderColor: '#8DB59A',
   },
+
   sizeButtonText: {
-    fontSize: 12.5,
-    color: '#555',
+    fontSize: 11,
     fontWeight: '600',
+    color: '#68736C',
   },
+
   sizeButtonTextSelected: {
-    color: '#6E3DE6',
+    color: '#347B5C',
+  },
+
+  sheetDoneButton: {
+    marginTop: 20,
+    backgroundColor: '#347B5C',
+    alignItems: 'center',
+    paddingVertical: 13,
+    borderRadius: 11,
+  },
+
+  sheetDoneText: {
+    fontSize: 13,
     fontWeight: '700',
+    color: '#FFFFFF',
   },
-  themeRow: {
+
+  themeGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: 14,
+    flexWrap: 'wrap',
+    gap: 18,
+    marginTop: 10,
+    marginBottom: 15,
   },
-  themeCircleOuter: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+
+  themeOption: {
+    width: '28%',
+    alignItems: 'center',
+    gap: 7,
+  },
+
+  themeSwatch: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    borderWidth: 1,
+    borderColor: '#E1E5E1',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+
+  themeSwatchSelected: {
     borderWidth: 2,
-    borderColor: 'transparent',
+    borderColor: '#347B5C',
   },
-  themeCircleOuterSelected: {
-    borderColor: '#222222',
-  },
-  themeCircleInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-  },
-  polaroidOptionsRow: {
-    gap: 10,
-    marginTop: 6,
-  },
-  polaroidOptionCard: {
-    backgroundColor: '#F7F7FA',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  polaroidOptionCardSelected: {
-    backgroundColor: '#EDFAF2',
-    borderWidth: 1.5,
-    borderColor: '#45C49A',
-  },
-  polaroidOptionCaption: {
-    fontSize: 14.5,
+
+  themeName: {
+    fontSize: 10,
+    color: '#69766E',
     fontWeight: '600',
-    color: '#222',
+    textAlign: 'center',
   },
-  polaroidOptionSub: {
-    fontSize: 12,
-    color: '#777',
-  },
-  rephraseBanner: {
+
+  polaroidOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#F0FAF4',
-    borderWidth: 1,
-    borderColor: '#D2F2E2',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    padding: 12,
     borderRadius: 12,
-    marginBottom: 14,
-  },
-  rephraseBannerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  rephraseBannerTitle: {
-    fontSize: 13,
-    color: '#333333',
-    fontWeight: '500',
-  },
-  rephraseBannerTone: {
-    color: '#2F855A',
-    fontWeight: '700',
-  },
-  rephraseBannerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rephraseBannerToneBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#E2F7EC',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7,
-  },
-  rephraseBannerToneBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2F855A',
-  },
-  rephraseBannerUndoBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 7,
     borderWidth: 1,
-    borderColor: '#E2DFE6',
+    borderColor: '#E8EDE8',
+    marginBottom: 9,
+    gap: 11,
   },
-  rephraseBannerUndoText: {
+
+  polaroidOptionSelected: {
+    backgroundColor: '#EFF6F0',
+    borderColor: '#91B69B',
+  },
+
+  polaroidOptionIcon: {
+    width: 37,
+    height: 37,
+    borderRadius: 10,
+    backgroundColor: '#EFF5F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  polaroidOptionText: {
+    flex: 1,
+  },
+
+  polaroidOptionTitle: {
     fontSize: 12,
-    fontWeight: '600',
-    color: '#555555',
-  },
-  sheetApplyText: {
-    fontSize: 14.5,
-    color: '#2F855A',
     fontWeight: '700',
+    color: '#3C4A41',
   },
-  toneOptionsList: {
-    gap: 10,
-    marginTop: 8,
+
+  polaroidOptionSubtitle: {
+    fontSize: 10,
+    color: '#929D95',
+    marginTop: 4,
   },
-  toneOptionCard: {
+
+  toneOption: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F7F7FA',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 14,
     gap: 12,
+    padding: 13,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E9EDE9',
+    marginBottom: 9,
   },
-  toneOptionCardSelected: {
-    backgroundColor: '#EDFAF2',
-    borderWidth: 1.5,
-    borderColor: '#45C49A',
+
+  toneOptionSelected: {
+    backgroundColor: '#EFF6F0',
+    borderColor: '#91B69B',
   },
+
   toneEmoji: {
     fontSize: 22,
   },
+
   toneTextColumn: {
     flex: 1,
   },
-  toneName: {
-    fontSize: 15,
+
+  toneTitle: {
+    fontSize: 13,
     fontWeight: '700',
-    color: '#222222',
+    color: '#3C4A41',
   },
-  toneNameSelected: {
-    color: '#157351',
-  },
+
   toneDescription: {
-    fontSize: 12,
-    color: '#777777',
-    marginTop: 2,
+    fontSize: 10,
+    color: '#929D95',
+    marginTop: 3,
   },
 });

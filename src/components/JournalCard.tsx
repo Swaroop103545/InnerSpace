@@ -1,5 +1,12 @@
+
 import React from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Platform } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+  TouchableOpacity,
+  Platform,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { JournalEntry } from '../types';
 import { Polaroid } from './Polaroid';
@@ -44,7 +51,6 @@ export const JournalCard: React.FC<JournalCardProps> = ({
     title,
     titleEmoji,
     body,
-    backgroundColor,
     textColors,
     polaroid,
     mood,
@@ -54,66 +60,82 @@ export const JournalCard: React.FC<JournalCardProps> = ({
   } = entry;
 
   const colors = {
-    date: textColors?.date || '#781552',
-    title: textColors?.title || '#1C1335',
-    body: textColors?.body || '#4A4259',
+    date: textColors?.date || '#85818B',
+    title: textColors?.title || '#24212B',
+    body: textColors?.body || '#686570',
   };
 
-  const hasTitle = Boolean(title && title.trim().length > 0);
+  const hasTitle = Boolean(title?.trim());
   const isBodyDuplicate = Boolean(
-    hasTitle && body && body.trim() === title.trim()
+    hasTitle && body?.trim() === title?.trim()
   );
-  const hasBody = Boolean(body && body.trim().length > 0 && !isBodyDuplicate);
+  const hasBody = Boolean(body?.trim() && !isBodyDuplicate);
+
+  const hasMetadata = Boolean(
+    (mood && MOOD_ICONS[mood]) ||
+    (weather && WEATHER_ICONS[weather]) ||
+    isFavorite
+  );
 
   return (
     <TouchableOpacity
-      activeOpacity={0.88}
+      activeOpacity={0.75}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={350}
-      style={[styles.card, { backgroundColor }]}
+      style={styles.card}
     >
       <View style={styles.cardContent}>
         <View style={polaroid ? styles.leftColumn : styles.fullColumn}>
-          {/* Date Label with optional Mood, Weather & Favorite Star */}
-          <View style={styles.dateRow}>
+          {/* Metadata */}
+          <View style={styles.header}>
             <Text style={[styles.dateText, { color: colors.date }]}>
               {date}
             </Text>
-            {mood && MOOD_ICONS[mood] ? (
-              <Text style={styles.metaEmoji}>{MOOD_ICONS[mood]}</Text>
-            ) : null}
-            {weather && WEATHER_ICONS[weather] ? (
-              <Text style={styles.metaEmoji}>{WEATHER_ICONS[weather]}</Text>
-            ) : null}
-            {isFavorite ? (
-              <Ionicons
-                name="star"
-                size={12}
-                color={colors.date}
-                style={styles.starIcon}
-              />
-            ) : null}
+
+            {hasMetadata && (
+              <View style={styles.metadata}>
+                {mood && MOOD_ICONS[mood] ? (
+                  <Text style={styles.metaEmoji}>
+                    {MOOD_ICONS[mood]}
+                  </Text>
+                ) : null}
+
+                {weather && WEATHER_ICONS[weather] ? (
+                  <Text style={styles.metaEmoji}>
+                    {WEATHER_ICONS[weather]}
+                  </Text>
+                ) : null}
+
+                {isFavorite ? (
+                  <Ionicons
+                    name="star"
+                    size={13}
+                    color="#C69A45"
+                  />
+                ) : null}
+              </View>
+            )}
           </View>
 
-          {/* Title Row with Playfair Display and Emoji */}
-          {/* {hasTitle ? (
-            <View style={styles.titleRow}>
-              <Text
-                style={[
-                  styles.titleText,
-                  { color: colors.title },
-                  fontsLoaded ? { fontFamily: 'PlayfairDisplay_700Bold' } : null,
-                ]}
-                numberOfLines={2}
-              >
-                {title}
-                {titleEmoji ? ` ${titleEmoji}` : ''}
-              </Text>
-            </View>
-          ) : null} */}
+          {/* Title */}
+          {hasTitle ? (
+            <Text
+              style={[
+                styles.titleText,
+                { color: colors.title },
+                fontsLoaded
+                  ? { fontFamily: 'PlayfairDisplay_700Bold' }
+                  : null,
+              ]}
+              numberOfLines={2}
+            >
+              {title}
+              {titleEmoji ? ` ${titleEmoji}` : ''}
+            </Text>
+          ) : null}
 
-          {/* Body Text */}
+          {/* Body */}
           {hasBody ? (
             <Text
               style={[styles.bodyText, { color: colors.body }]}
@@ -123,27 +145,19 @@ export const JournalCard: React.FC<JournalCardProps> = ({
             </Text>
           ) : null}
 
-          {/* Optional Tags */}
+          {/* Tags */}
           {tags && tags.length > 0 ? (
             <View style={styles.tagsContainer}>
               {tags.slice(0, 3).map((tag) => (
-                <View
-                  key={tag}
-                  style={[
-                    styles.cardTagChip,
-                    { backgroundColor: 'rgba(255, 255, 255, 0.42)' },
-                  ]}
-                >
-                  <Text style={[styles.cardTagText, { color: colors.title }]}>
-                    #{tag}
-                  </Text>
-                </View>
+                <Text key={tag} style={styles.cardTagText}>
+                  #{tag}
+                </Text>
               ))}
             </View>
           ) : null}
         </View>
 
-        {/* Optional Polaroid Section */}
+        {/* Polaroid */}
         {polaroid ? (
           <View style={styles.rightColumn}>
             <Polaroid
@@ -161,82 +175,89 @@ export const JournalCard: React.FC<JournalCardProps> = ({
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 26,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
-    marginBottom: 16,
-    shadowColor: '#1A0B2E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    elevation: 3,
+    backgroundColor: 'transparent',
+    paddingVertical: 20,
+    paddingHorizontal: 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#EAE8ED',
   },
+
   cardContent: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
   },
+
   leftColumn: {
     flex: 1,
-    paddingRight: 14,
-    justifyContent: 'flex-start',
+    paddingRight: 16,
   },
+
   fullColumn: {
     flex: 1,
   },
+
   rightColumn: {
     alignItems: 'center',
     justifyContent: 'flex-start',
-    paddingTop: 2,
+    paddingTop: 3,
   },
-  dateRow: {
+
+  header: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 7,
-    gap: 6,
+    justifyContent: 'space-between',
+    marginBottom: 11,
   },
+
   dateText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.7,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.1,
     textTransform: 'uppercase',
   },
+
+  metadata: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+
   metaEmoji: {
-    fontSize: 12,
+    fontSize: 13,
   },
-  starIcon: {
-    marginBottom: 1,
-  },
-  titleRow: {
-    marginBottom: 6,
-  },
+
   titleText: {
-    fontSize: 19.5,
-    fontWeight: '800',
-    letterSpacing: -0.3,
-    lineHeight: 24,
-    fontFamily: Platform.select({ ios: 'Georgia', android: 'serif' }),
+    fontSize: 19,
+    lineHeight: 26,
+    fontWeight: '700',
+    letterSpacing: -0.45,
+    marginBottom: 7,
+    fontFamily: Platform.select({
+      ios: 'Georgia',
+      android: 'serif',
+    }),
   },
+
   bodyText: {
-    fontSize: 13.5,
-    lineHeight: 19.5,
-    fontWeight: '500',
-    letterSpacing: -0.1,
+    fontSize: 13,
+    lineHeight: 21,
+    fontWeight: '400',
+    letterSpacing: 0.05,
   },
+
   tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 6,
-    marginTop: 10,
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 13,
   },
-  cardTagChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-  },
+
   cardTagText: {
+    color: '#898590',
     fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: -0.2,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
 });

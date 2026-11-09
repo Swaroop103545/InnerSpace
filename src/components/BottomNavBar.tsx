@@ -3,7 +3,7 @@ import { StyleSheet, View, TouchableOpacity } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-export type TabType = 'home' | 'calendar' | 'add' | 'analytics' | 'profile';
+export type TabType = 'home' | 'calendar' | 'add' | 'users' | 'profile';
 
 interface BottomNavBarProps {
   activeTab?: TabType;
@@ -67,13 +67,13 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
         <TouchableOpacity
           activeOpacity={0.7}
-          onPress={() => handlePress('analytics')}
+          onPress={() => handlePress('users')}
           style={styles.navItem}
         >
           <Ionicons
-            name="analytics"
+            name="people-outline"
             size={23}
-            color={activeTab === 'analytics' ? '#6E3DE6' : '#7E7790'}
+            color={activeTab === 'users' ? '#6E3DE6' : '#7E7790'}
           />
         </TouchableOpacity>
 
