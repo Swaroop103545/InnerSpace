@@ -1,6 +1,7 @@
 import { ImageSourcePropType } from 'react-native';
 
 export interface PolaroidData {
+  id?: string;
   image: any;
   caption: string;
   tapeColor: string;

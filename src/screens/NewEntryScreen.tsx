@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather, MaterialCommunityIcons, Ionicons } from '@expo/vector-icons';
 import {
   useFonts,
   PlayfairDisplay_700Bold,
@@ -368,7 +368,7 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
 
   const [activePicker, setActivePicker] = useState<PickerType>(null);
 
-  const inputRef = useRef<TextInput>(null);
+  const inputRef = useRef<any>(null);
 
   const dayNumber = entryDate.getDate();
 
@@ -710,7 +710,7 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
     <View key={field.key} style={styles.dailyFieldCard}>
       <View style={styles.dailyFieldHeader}>
         <View style={styles.dailyFieldIcon}>
-          <MaterialCommunityIcons
+          <Ionicons
             name={field.icon}
             size={19}
             color="#547365"
@@ -2472,7 +2472,7 @@ const styles = StyleSheet.create({
   },
 
   modalBackdrop: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(20, 30, 24, 0.4)',
   },
 

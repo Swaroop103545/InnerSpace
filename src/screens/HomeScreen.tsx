@@ -64,7 +64,9 @@ import {
 } from '../store/slices/uiSlice';
 import {
   updateProfile,
+  logout,
   selectUserName,
+  selectUserEmail,
   selectUserSubtitle,
   selectUserStreakDays,
 } from '../store/slices/userSlice';
@@ -121,7 +123,11 @@ const users = [
     { id: '2', name: 'Aditya', relation: 'Friend', mentions: '15 mentions' },
   ];
 
-export const HomeScreen: React.FC = () => {
+export interface HomeScreenProps {
+  onLogout?: () => void;
+}
+
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const dispatch = useAppDispatch();
 
   // Redux state selectors
@@ -136,7 +142,19 @@ export const HomeScreen: React.FC = () => {
   const editingEntry = useAppSelector(selectEditingEntry);
   const selectedEntryDetail = useAppSelector(selectSelectedEntryDetail);
   const sections = useAppSelector((state) => state.journal.sections);
-  const [entries, setEntries] = useState();
+  const allCalendarEntries = React.useMemo(() => {
+    return sections.flatMap((section) =>
+      section.data.map((entry) => ({
+        id: entry.id,
+        date: entry.date,
+        timestamp: entry.timestamp,
+        title: entry.title,
+        body: entry.body,
+        mood: entry.mood,
+        backgroundColor: entry.backgroundColor,
+      }))
+    );
+  }, [sections]);
 
   // Live reference to ensure modal reflects any instant updates/deletions
   const liveViewingEntry = React.useMemo(() => {
@@ -149,6 +167,7 @@ export const HomeScreen: React.FC = () => {
   }, [sections, selectedEntryDetail]);
   const isSearchBarVisible = useAppSelector(selectIsSearchBarVisible);
   const userName = useAppSelector(selectUserName);
+  const userEmail = useAppSelector(selectUserEmail);
   const userSubtitle = useAppSelector(selectUserSubtitle);
   const userStreakDays = useAppSelector(selectUserStreakDays);
   const stats = useAppSelector(selectJournalStats);
@@ -273,7 +292,7 @@ export const HomeScreen: React.FC = () => {
             <View
               key={item.id}
               style={[
-                styles.cardWrapper,
+                styles.userCardWrapper,
                 isOdd ? styles.offsetDown : styles.offsetUp,
               ]}
             >
@@ -417,6 +436,7 @@ export const HomeScreen: React.FC = () => {
         </View>
 
         <Text style={styles.profileName}>{userName}</Text>
+        {userEmail ? <Text style={styles.profileEmail}>{userEmail}</Text> : null}
         <Text style={styles.profileSubtitle}>{userSubtitle}</Text>
 
         <View style={styles.profileStatsRow}>
@@ -495,6 +515,39 @@ export const HomeScreen: React.FC = () => {
           </View>
           <Feather name="chevron-right" size={16} color="#A098AE" />
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={styles.profileActionRow}
+          activeOpacity={0.7}
+          onPress={() => {
+            Alert.alert(
+              'Sign Out',
+              'Are you sure you want to sign out of InnerSpace?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Sign Out',
+                  style: 'destructive',
+                  onPress: () => {
+                    if (onLogout) {
+                      onLogout();
+                    } else {
+                      dispatch(logout());
+                    }
+                  },
+                },
+              ]
+            );
+          }}
+        >
+          <View style={styles.profileActionLeft}>
+            <Feather name="log-out" size={18} color="#D9383A" />
+            <Text style={[styles.profileActionText, { color: '#D9383A' }]}>
+              Sign Out
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={16} color="#A098AE" />
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity
@@ -515,17 +568,19 @@ export const HomeScreen: React.FC = () => {
         {/* Render Active View based on activeTab */}
         {/* {activeTab === 'users' && renderAnalyticsView()} */}
         {activeTab === 'users' && <UsersRender />}
-        {activeTab === 'calendar' && 
-          <CalendarScreen 
-            entries={entries}
-            onOpenEntry={(entry) => {
-    // Connect this to your existing journal entry edit/open flow.
-            setEntryToEdit(entry);
-            dispatch(setActiveTab('home'));
-    // Open your existing New Entry / Edit Entry modal here.
-  }}
-
-          />}
+        {activeTab === 'calendar' && (
+          <CalendarScreen
+            entries={allCalendarEntries}
+            onOpenEntry={(calEntry) => {
+              const fullEntry = sections
+                .flatMap((s) => s.data)
+                .find((e) => e.id === calEntry.id);
+              if (fullEntry) {
+                dispatch(setSelectedEntryDetail(fullEntry));
+              }
+            }}
+          />
+        )}
         {activeTab === 'profile' && renderProfileView()}
 
         {/* Default Home Journal Feed */}
@@ -650,7 +705,7 @@ export const HomeScreen: React.FC = () => {
                       accessibilityRole="button"
                       accessibilityLabel={`Sort entries, currently ${sortDescending ? 'newest first' : 'oldest first'}`}
                     >
-                      <Feather name="arrow-down-up" size={17} color="#344054" />
+                      <Ionicons name="swap-vertical" size={17} color="#344054" />
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={() => {
@@ -1227,6 +1282,13 @@ const styles = StyleSheet.create({
     color: '#1C1335',
     letterSpacing: -0.3,
   },
+  profileEmail: {
+    fontSize: 13,
+    color: '#898392',
+    marginTop: 2,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
   profileSubtitle: {
     fontSize: 14,
     color: '#79718A',
@@ -1304,7 +1366,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 24, // Extra margin to account for lower offset card
   },
-  cardWrapper: {
+  userCardWrapper: {
     flex: 1,
     paddingHorizontal: 10
   },
