@@ -12,13 +12,14 @@ import {
   TextInput,
   TouchableOpacity,
   ScrollView,
+  RefreshControl,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFonts, PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 
-import { Header } from '../components/Header';
 import { MonthSectionHeader } from '../components/EntriesHeader';
 import { JournalCard } from '../components/JournalCard';
 import { CardDetailModal } from '../components/CardDetailModal';
@@ -34,13 +35,11 @@ import {
   toggleFavoriteEntry,
   toggleSortDescending,
   toggleSectionCollapse,
-  expandAllSections,
-  collapseAllSections,
   setSearchQuery,
   setSelectedMoodFilter,
-  setSelectedTagFilter,
   clearFilters,
   resetToInitialData,
+  setEntries,
   selectDisplayedSections,
   selectSortDescending,
   selectCollapsedSections,
@@ -48,6 +47,7 @@ import {
   selectMoodFilter,
   selectTagFilter,
   selectJournalStats,
+  selectIsLoadingEntries,
 } from '../store/slices/journalSlice';
 import {
   setActiveTab,
@@ -65,11 +65,22 @@ import {
 import {
   updateProfile,
   logout,
+  selectUserId,
   selectUserName,
   selectUserEmail,
   selectUserSubtitle,
   selectUserStreakDays,
 } from '../store/slices/userSlice';
+import {
+  addJournalEntry,
+  updateJournalEntry,
+  deleteJournalEntry,
+  toggleFavoriteJournalEntry,
+  getJournalEntries,
+  resetUserEntriesToDemo,
+  storeAllEntriesToFirestore,
+} from '../services/journalFirestoreService';
+import { updateUserProfile } from '../services/authService';
 import UsersRender from '@/components/users';
 import CalendarScreen from './CalendarScreen';
 import ProfileScreen from './ProfileScreen';
@@ -85,44 +96,6 @@ const QUICK_MOOD_FILTERS = [
   { id: 'inspired', emoji: '✨', label: 'Inspired' },
   { id: 'grateful', emoji: '🙏', label: 'Grateful' },
 ];
-
-const PASTEL_PALETTES = [
-  {
-    bg: '#EBF4FF',      // Soft Pastel Blue
-    badgeBg: '#DBEAFE',
-    badgeText: '#1E40AF',
-    textPrimary: '#1E293B',
-    textSecondary: '#64748B',
-  },
-  {
-    bg: '#FEE2E2',      // Soft Pastel Coral / Rose
-    badgeBg: '#FCA5A5',
-    badgeText: '#991B1B',
-    textPrimary: '#450A0A',
-    textSecondary: '#7F1D1D',
-  },
-  {
-    bg: '#F3E8FF',      // Soft Pastel Lavender
-    badgeBg: '#E9D5FF',
-    badgeText: '#6B21A8',
-    textPrimary: '#3B0764',
-    textSecondary: '#6B21A8',
-  },
-  {
-    bg: '#FEF3C7',      // Soft Pastel Mint / Cream
-    badgeBg: '#FDE68A',
-    badgeText: '#92400E',
-    textPrimary: '#451A03',
-    textSecondary: '#78350F',
-  },
-];
-  
-const users = [
-    { id: '1', name: 'Swaroop', relation: 'Brother', mentions: '10 mentions' },
-    { id: '2', name: 'Aditya', relation: 'Friend', mentions: '15 mentions' },
-    { id: '1', name: 'Swaroop', relation: 'Brother', mentions: '10 mentions' },
-    { id: '2', name: 'Aditya', relation: 'Friend', mentions: '15 mentions' },
-  ];
 
 export interface HomeScreenProps {
   onLogout?: () => void;
@@ -185,9 +158,96 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     }
   };
 
+  const userId = useAppSelector(selectUserId);
+  const isLoadingEntries = useAppSelector(selectIsLoadingEntries);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Single click: open the card completely with full text & details inside
   const handleCardPress = (entry: JournalEntry) => {
     dispatch(setSelectedEntryDetail(entry));
+  };
+
+  // Pull-to-refresh: fetches latest entries from Firestore
+  const handleRefresh = async () => {
+    if (userId && userId !== 'demo-local-user') {
+      setIsRefreshing(true);
+      try {
+        const latest = await getJournalEntries(userId);
+        dispatch(setEntries(latest));
+      } catch (err) {
+        console.warn('Error refreshing entries from Firestore:', err);
+      } finally {
+        setIsRefreshing(false);
+      }
+    }
+  };
+
+  // Sync / Store all entries to Firebase Firestore
+  const handleSyncAllToFirebase = async () => {
+    if (!userId || userId === 'demo-local-user') {
+      Alert.alert(
+        'Cloud Sync Required',
+        'Please sign in with your Firebase account to store your entries in the cloud.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    try {
+      setIsRefreshing(true);
+      const allEntries = sections.flatMap((sec) => sec.data);
+      const count = await storeAllEntriesToFirestore(userId, allEntries);
+      Alert.alert(
+        'Firebase Synced!',
+        `Successfully stored all ${count} entries to Firebase Firestore.`,
+        [{ text: 'Great' }]
+      );
+    } catch (err: any) {
+      Alert.alert(
+        'Sync Notice',
+        err?.message || 'Unable to store entries to Firebase.'
+      );
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // Toggle Favorite: local Redux optimistic update + Firestore sync
+  const handleToggleFavorite = (entry: JournalEntry) => {
+    animateNext();
+    dispatch(toggleFavoriteEntry(entry.id));
+    if (userId && userId !== 'demo-local-user') {
+      toggleFavoriteJournalEntry(userId, entry.id, !entry.isFavorite).catch(
+        (err) => console.warn('Error syncing favorite to Firestore:', err)
+      );
+    }
+  };
+
+  // Delete Entry: confirmation prompt + Redux removal + Firestore deletion
+  const handleDeleteEntry = (entry: JournalEntry) => {
+    Alert.alert(
+      'Delete Entry?',
+      'Are you sure you want to permanently delete this memory?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            animateNext();
+            dispatch(deleteEntry({ id: entry.id }));
+            if (selectedEntryDetail?.id === entry.id) {
+              dispatch(setSelectedEntryDetail(null));
+            }
+            if (userId && userId !== 'demo-local-user') {
+              deleteJournalEntry(userId, entry.id).catch((err) =>
+                console.warn('Error deleting entry from Firestore:', err)
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   // Long press: display existing entry action options (Favorite, Edit, Delete)
@@ -198,10 +258,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       [
         {
           text: entry.isFavorite ? '★ Remove Favorite' : '☆ Mark Favorite',
-          onPress: () => {
-            animateNext();
-            dispatch(toggleFavoriteEntry(entry.id));
-          },
+          onPress: () => handleToggleFavorite(entry),
         },
         {
           text: '✎ Edit Entry',
@@ -212,23 +269,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
         {
           text: '🗑 Delete Entry',
           style: 'destructive',
-          onPress: () => {
-            Alert.alert(
-              'Delete Entry?',
-              'Are you sure you want to permanently delete this memory?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: () => {
-                    animateNext();
-                    dispatch(deleteEntry({ id: entry.id }));
-                  },
-                },
-              ]
-            );
-          },
+          onPress: () => handleDeleteEntry(entry),
         },
         { text: 'Cancel', style: 'cancel' },
       ]
@@ -253,8 +294,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     animateNext();
     if (editingEntry) {
       dispatch(updateEntry(savedEntry));
+      if (userId && userId !== 'demo-local-user') {
+        updateJournalEntry(userId, savedEntry).catch((err) =>
+          console.warn('Error updating entry in Firestore:', err)
+        );
+      }
     } else {
       dispatch(addEntry(savedEntry));
+      if (userId && userId !== 'demo-local-user') {
+        addJournalEntry(userId, savedEntry).catch((err) =>
+          console.warn('Error adding entry to Firestore:', err)
+        );
+      }
     }
     dispatch(closeNewEntryModal());
   };
@@ -268,329 +319,46 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     0
   );
 
-  // Users Tab
-  const renderUsersview = () => (
-    <ScrollView
-      style={styles.tabContentScroll}
-      contentContainerStyle={styles.tabContentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.tabHeader}>
-        <Header />
-
-        <View>
-          <TextInput
-            placeholder="Search User..."
-            placeholderTextColor="#9AA0A6"
-            style={styles.usersSearchInput}
-          />
-        </View>
-
-        <View style={styles.cardsRow}>
-        {users.map((item, index) => {
-          const isOdd = index % 2 !== 0;
-          const theme = PASTEL_PALETTES[index % PASTEL_PALETTES.length];
-
-          return (
-            <View
-              key={item.id}
-              style={[
-                styles.userCardWrapper,
-                isOdd ? styles.offsetDown : styles.offsetUp,
-              ]}
-            >
-              <View style={[styles.card, { backgroundColor: theme.bg }]}>
-                <Text style={[styles.cardTitle, { color: theme.textPrimary }]}>
-                  {item.name}
-                </Text>
-                
-                <Text style={[styles.cardRelation, { color: theme.textSecondary }]}>
-                  {item.relation}
-                </Text>
-
-                <View style={[styles.badge, { backgroundColor: theme.badgeBg }]}>
-                  <Text style={[styles.badgeText, { color: theme.badgeText }]}>
-                    {item.mentions}
-                  </Text>
-                </View>
-              </View>
-            </View>
-          );
-        })}
-      </View>
-
-      </View>
-    </ScrollView>
-  );
-
-  // Render Calendar / Archive Tab
-  const renderCalendarView = () => (
-    <ScrollView
-      style={styles.tabContentScroll}
-      contentContainerStyle={styles.tabContentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.tabHeader}>
-        <Text
-          style={[
-            styles.tabTitle,
-            fontsLoaded ? { fontFamily: 'PlayfairDisplay_700Bold' } : null,
-          ]}
-        >
-          Timeline Archive
-        </Text>
-        <Text style={styles.tabSubtitle}>
-          {stats.totalSections} chronological chapters recorded
-        </Text>
-      </View>
-
-      {/* Quick Section Controls */}
-      <View style={styles.archiveControlsRow}>
-        <TouchableOpacity
-          style={styles.archiveActionButton}
-          onPress={() => {
-            animateNext();
-            dispatch(expandAllSections());
-          }}
-        >
-          <Ionicons name="expand-outline" size={16} color="#6E3DE6" />
-          <Text style={styles.archiveActionText}>Expand All</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.archiveActionButton}
-          onPress={() => {
-            animateNext();
-            dispatch(collapseAllSections());
-          }}
-        >
-          <Ionicons name="contract-outline" size={16} color="#6E3DE6" />
-          <Text style={styles.archiveActionText}>Collapse All</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Month Chapters List */}
-      <View style={styles.archiveList}>
-        {displayedSections.map((section) => {
-          const isCollapsed = Boolean(collapsedSections[section.id]);
-          return (
-            <TouchableOpacity
-              key={section.id}
-              activeOpacity={0.75}
-              onPress={() => {
-                toggleSection(section.id);
-                dispatch(setActiveTab('home'));
-              }}
-              style={styles.archiveCard}
-            >
-              <View style={styles.archiveCardLeft}>
-                <Text style={styles.archiveCardMonth}>{section.month}</Text>
-                <Text style={styles.archiveCardYear}>{section.year}</Text>
-              </View>
-              <View style={styles.archiveCardRight}>
-                <Text style={styles.archiveCardCount}>
-                  {section.totalCount} {section.totalCount === 1 ? 'entry' : 'entries'}
-                </Text>
-                <Ionicons
-                  name={isCollapsed ? 'chevron-forward' : 'chevron-down'}
-                  size={16}
-                  color="#79718A"
-                />
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <TouchableOpacity
-        style={styles.backButton}
-        activeOpacity={0.8}
-        onPress={() => dispatch(setActiveTab('home'))}
-      >
-        <Text style={styles.backButtonText}>View in Journal Feed</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
-
-  // Render Profile Tab
-  // const renderProfileView = () => (
-  //   <ScrollView
-  //     style={styles.tabContentScroll}
-  //     contentContainerStyle={styles.tabContentContainer}
-  //     showsVerticalScrollIndicator={false}
-  //   >
-  //     <View style={styles.tabHeader}>
-  //       <Text
-  //         style={[
-  //           styles.tabTitle,
-  //           fontsLoaded ? { fontFamily: 'PlayfairDisplay_700Bold' } : null,
-  //         ]}
-  //       >
-  //         Author Profile
-  //       </Text>
-  //       <Text style={styles.tabSubtitle}>Manage your journal persona & preferences</Text>
-  //     </View>
-
-  //     <View style={styles.profileCard}>
-  //       <View style={styles.profileAvatarLarge}>
-  //         <Text style={styles.profileAvatarInitial}>
-  //           {userName ? userName[0].toUpperCase() : 'E'}
-  //         </Text>
-  //       </View>
-
-  //       <Text style={styles.profileName}>{userName}</Text>
-  //       {userEmail ? <Text style={styles.profileEmail}>{userEmail}</Text> : null}
-  //       <Text style={styles.profileSubtitle}>{userSubtitle}</Text>
-
-  //       <View style={styles.profileStatsRow}>
-  //         <View style={styles.profileStatItem}>
-  //           <Text style={styles.profileStatValue}>{stats.totalEntries}</Text>
-  //           <Text style={styles.profileStatLabel}>Entries</Text>
-  //         </View>
-  //         <View style={styles.profileStatDivider} />
-  //         <View style={styles.profileStatItem}>
-  //           <Text style={styles.profileStatValue}>{userStreakDays}</Text>
-  //           <Text style={styles.profileStatLabel}>Day Streak</Text>
-  //         </View>
-  //         <View style={styles.profileStatDivider} />
-  //         <View style={styles.profileStatItem}>
-  //           <Text style={styles.profileStatValue}>{stats.totalPolaroids}</Text>
-  //           <Text style={styles.profileStatLabel}>Photos</Text>
-  //         </View>
-  //       </View>
-  //     </View>
-
-  //     {/* Profile Actions */}
-  //     <View style={styles.profileActionsContainer}>
-  //       <TouchableOpacity
-  //         style={styles.profileActionRow}
-  //         activeOpacity={0.7}
-  //         onPress={() => {
-  //           Alert.prompt
-  //             ? Alert.prompt(
-  //               'Edit Name',
-  //               'Enter your preferred name:',
-  //               (text) => {
-  //                 if (text && text.trim()) {
-  //                   dispatch(updateProfile({ name: text.trim() }));
-  //                 }
-  //               },
-  //               'plain-text',
-  //               userName
-  //             )
-  //             : Alert.alert('Profile', `Currently journaling as ${userName}`);
-  //         }}
-  //       >
-  //         <View style={styles.profileActionLeft}>
-  //           <Feather name="user" size={18} color="#6E3DE6" />
-  //           <Text style={styles.profileActionText}>Name: {userName}</Text>
-  //         </View>
-  //         <Feather name="chevron-right" size={16} color="#A098AE" />
-  //       </TouchableOpacity>
-
-  //       <TouchableOpacity
-  //         style={styles.profileActionRow}
-  //         activeOpacity={0.7}
-  //         onPress={() => {
-  //           Alert.alert(
-  //             'Reset Demo Data?',
-  //             'This will reset all sections and entries to the initial demo entries.',
-  //             [
-  //               { text: 'Cancel', style: 'cancel' },
-  //               {
-  //                 text: 'Reset Data',
-  //                 style: 'destructive',
-  //                 onPress: () => {
-  //                   animateNext();
-  //                   dispatch(resetToInitialData());
-  //                   dispatch(setActiveTab('home'));
-  //                 },
-  //               },
-  //             ]
-  //           );
-  //         }}
-  //       >
-  //         <View style={styles.profileActionLeft}>
-  //           <Feather name="refresh-cw" size={18} color="#E56338" />
-  //           <Text style={[styles.profileActionText, { color: '#E56338' }]}>
-  //             Reset to Demo Entries
-  //           </Text>
-  //         </View>
-  //         <Feather name="chevron-right" size={16} color="#A098AE" />
-  //       </TouchableOpacity>
-
-  //       <TouchableOpacity
-  //         style={styles.profileActionRow}
-  //         activeOpacity={0.7}
-  //         onPress={() => {
-  //           Alert.alert(
-  //             'Sign Out',
-  //             'Are you sure you want to sign out of InnerSpace?',
-  //             [
-  //               { text: 'Cancel', style: 'cancel' },
-  //               {
-  //                 text: 'Sign Out',
-  //                 style: 'destructive',
-  //                 onPress: () => {
-  //                   if (onLogout) {
-  //                     onLogout();
-  //                   } else {
-  //                     dispatch(logout());
-  //                   }
-  //                 },
-  //               },
-  //             ]
-  //           );
-  //         }}
-  //       >
-  //         <View style={styles.profileActionLeft}>
-  //           <Feather name="log-out" size={18} color="#D9383A" />
-  //           <Text style={[styles.profileActionText, { color: '#D9383A' }]}>
-  //             Sign Out
-  //           </Text>
-  //         </View>
-  //         <Feather name="chevron-right" size={16} color="#A098AE" />
-  //       </TouchableOpacity>
-  //     </View>
-
-  //     <TouchableOpacity
-  //       style={styles.backButton}
-  //       activeOpacity={0.8}
-  //       onPress={() => dispatch(setActiveTab('home'))}
-  //     >
-  //       <Text style={styles.backButtonText}>Return to Journal</Text>
-  //     </TouchableOpacity>
-  //   </ScrollView>
-  // );
-
   const renderProfileView = () => (
-  <ProfileScreen
+    <ProfileScreen
       userName={userName}
       userEmail={userEmail}
       userSubtitle={userSubtitle}
       userStreakDays={userStreakDays}
       stats={stats}
-      // entries={entries}
+      entries={allCalendarEntries}
       fontsLoaded={fontsLoaded}
       onEditName={(name) => {
         dispatch(updateProfile({ name }));
-      } }
+        if (userId && userId !== 'demo-local-user') {
+          updateUserProfile(userId, { name }).catch((err) =>
+            console.warn('Error updating profile in Firestore:', err)
+          );
+        }
+      }}
       onResetData={() => {
         animateNext();
+        if (userId && userId !== 'demo-local-user') {
+          resetUserEntriesToDemo(userId).catch((err) =>
+            console.warn('Error resetting entries in Firestore:', err)
+          );
+        }
         dispatch(resetToInitialData());
         dispatch(setActiveTab('home'));
-      } }
+      }}
+      onSyncAllToFirebase={handleSyncAllToFirebase}
       onLogout={() => {
         if (onLogout) {
           onLogout();
         } else {
           dispatch(logout());
         }
-      } }
+      }}
       onReturnToJournal={() => {
         dispatch(setActiveTab('home'));
-      } } entries={[]}  />
-);
+      }}
+    />
+  );
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -654,18 +422,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                     </View>
                   </View>
 
-                  <TouchableOpacity
-                    activeOpacity={0.75}
-                    onPress={() => dispatch(setActiveTab('profile'))}
-                    style={styles.dashboardAvatarButton}
-                    accessibilityRole="button"
-                    accessibilityLabel="Open profile"
-                  >
-                    <Text style={styles.dashboardAvatarText}>
-                      {userName ? userName.charAt(0).toUpperCase() : 'E'}
-                    </Text>
-                    <View style={styles.dashboardOnlineDot} />
-                  </TouchableOpacity>
+                  <View style={styles.dashboardTopActions}>
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      onPress={handleSyncAllToFirebase}
+                      style={styles.dashboardSyncButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="Store all entries to Firebase"
+                    >
+                      <Ionicons name="cloud-upload-outline" size={17} color="#7663A8" />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      activeOpacity={0.75}
+                      onPress={() => dispatch(setActiveTab('profile'))}
+                      style={styles.dashboardAvatarButton}
+                      accessibilityRole="button"
+                      accessibilityLabel="Open profile"
+                    >
+                      <Text style={styles.dashboardAvatarText}>
+                        {userName ? userName.charAt(0).toUpperCase() : 'E'}
+                      </Text>
+                      <View style={styles.dashboardOnlineDot} />
+                    </TouchableOpacity>
+                  </View>
                 </View>
 
                 {/* Welcome panel */}
@@ -715,7 +495,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                   </View>
                   <View style={styles.dashboardComposeCopy}>
                     <Text style={styles.dashboardComposeTitle}>Capture a moment</Text>
-                    <Text style={styles.dashboardComposeSubtitle}>Write down what's on your mind</Text>
+                    <Text style={styles.dashboardComposeSubtitle}>Write down what&apos;s on your mind</Text>
                   </View>
                   <Feather name="arrow-up-right" size={19} color="#FFFFFF" />
                 </TouchableOpacity>
@@ -833,41 +613,59 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
               </View>
             }
             ListEmptyComponent={
-              <View style={styles.emptyContainer}>
-                <MaterialCommunityIcons
-                  name="notebook-outline"
-                  size={54}
-                  color="#C6BDD2"
-                />
-                <Text style={styles.emptyTitle}>No Entries Found</Text>
-                <Text style={styles.emptyDescription}>
-                  {hasActiveFilters
-                    ? 'No journal entries match your current search and filters.'
-                    : 'Your inner space is ready for your first reflection.'}
-                </Text>
-                {hasActiveFilters ? (
-                  <TouchableOpacity
-                    style={styles.emptyActionBtn}
-                    onPress={() => {
-                      animateNext();
-                      dispatch(clearFilters());
-                    }}
-                  >
-                    <Text style={styles.emptyActionText}>Reset Filters</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.emptyActionBtn}
-                    onPress={handleAddPress}
-                  >
-                    <Text style={styles.emptyActionText}>+ Write New Entry</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              isLoadingEntries ? (
+                <View style={styles.emptyContainer}>
+                  <ActivityIndicator size="large" color="#7663A8" />
+                  <Text style={styles.emptyTitle}>Syncing with InnerSpace...</Text>
+                  <Text style={styles.emptyDescription}>
+                    Loading your reflections and moments from the cloud.
+                  </Text>
+                </View>
+              ) : (
+                <View style={styles.emptyContainer}>
+                  <MaterialCommunityIcons
+                    name="notebook-outline"
+                    size={54}
+                    color="#C6BDD2"
+                  />
+                  <Text style={styles.emptyTitle}>No Entries Found</Text>
+                  <Text style={styles.emptyDescription}>
+                    {hasActiveFilters
+                      ? 'No journal entries match your current search and filters.'
+                      : 'Your inner space is ready for your first reflection.'}
+                  </Text>
+                  {hasActiveFilters ? (
+                    <TouchableOpacity
+                      style={styles.emptyActionBtn}
+                      onPress={() => {
+                        animateNext();
+                        dispatch(clearFilters());
+                      }}
+                    >
+                      <Text style={styles.emptyActionText}>Reset Filters</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.emptyActionBtn}
+                      onPress={handleAddPress}
+                    >
+                      <Text style={styles.emptyActionText}>+ Write New Entry</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )
             }
             stickySectionHeadersEnabled={false}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.scrollContent}
+            refreshControl={
+              <RefreshControl
+                refreshing={isRefreshing}
+                onRefresh={handleRefresh}
+                tintColor="#7663A8"
+                colors={['#7663A8']}
+              />
+            }
           />
         )}
 
@@ -907,32 +705,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
           onClose={() => {
             dispatch(setSelectedEntryDetail(null));
           }}
-          onToggleFavorite={(entry) => {
-            animateNext();
-            dispatch(toggleFavoriteEntry(entry.id));
-          }}
+          onToggleFavorite={handleToggleFavorite}
           onEdit={(entry) => {
             dispatch(setSelectedEntryDetail(null));
             dispatch(openEditEntryModal(entry));
           }}
-          onDelete={(entry) => {
-            Alert.alert(
-              'Delete Entry?',
-              'Are you sure you want to permanently delete this memory?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete',
-                  style: 'destructive',
-                  onPress: () => {
-                    animateNext();
-                    dispatch(deleteEntry({ id: entry.id }));
-                    dispatch(setSelectedEntryDetail(null));
-                  },
-                },
-              ]
-            );
-          }}
+          onDelete={handleDeleteEntry}
           fontsLoaded={fontsLoaded}
         />
       </View>
@@ -1478,6 +1256,21 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 1.15,
     marginTop: 3,
+  },
+  dashboardTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dashboardSyncButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F1ECF8',
+    borderWidth: 1,
+    borderColor: '#E2D9F2',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dashboardAvatarButton: {
     width: 42,

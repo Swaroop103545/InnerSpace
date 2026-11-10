@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Animated } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -17,7 +17,7 @@ export const MonthSectionHeader: React.FC<MonthSectionHeaderProps> = ({
   isExpanded = true,
   onToggle,
 }) => {
-  const animatedAngle = useRef(new Animated.Value(isExpanded ? 1 : 0)).current;
+  const [animatedAngle] = useState(() => new Animated.Value(isExpanded ? 1 : 0));
 
   useEffect(() => {
     Animated.spring(animatedAngle, {

@@ -9,6 +9,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'oct-1',
         date: 'FRIDAY, OCT 12',
+        timestamp: new Date('2026-10-12T14:30:00Z').getTime(),
         title: 'Sunny Coffee House',
         body: 'Spent the afternoon at that adorable little cafe. The matcha latte was delicious, and the warm sunlight through the window was perfect.',
         backgroundColor: '#EB7AB7',
@@ -18,17 +19,21 @@ export const INITIAL_SECTIONS: JournalSection[] = [
           body: '#73175A',
         },
         polaroid: {
+          id: 'matcha',
           image: require('../../assets/matcha-cafe.jpg'),
+          assetKey: 'matcha-cafe.jpg',
           caption: 'Matcha Day 🍵',
           tapeColor: 'rgba(182, 140, 244, 0.72)',
         },
         mood: 'happy',
         weather: 'sunny',
         tags: ['Daily', 'Wellness'],
+        isFavorite: true,
       },
       {
         id: 'oct-2',
         date: 'TUESDAY, OCT 09',
+        timestamp: new Date('2026-10-09T16:15:00Z').getTime(),
         title: 'Pumpkin Patch Autumn',
         titleEmoji: '🍂',
         body: 'Went pumpkin picking with Clara today! Finding the roundest pumpkin was harder than expected, but so much fun.',
@@ -39,7 +44,9 @@ export const INITIAL_SECTIONS: JournalSection[] = [
           body: '#6F230A',
         },
         polaroid: {
+          id: 'pumpkin',
           image: require('../../assets/clara-pumpkin.jpg'),
+          assetKey: 'clara-pumpkin.jpg',
           caption: 'Clara & Me 🎃',
           tapeColor: 'rgba(255, 185, 45, 0.8)',
         },
@@ -50,6 +57,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'oct-3',
         date: 'SUNDAY, OCT 07',
+        timestamp: new Date('2026-10-07T11:00:00Z').getTime(),
         title: 'Quiet Rainy Journaling',
         body: 'A very peaceful day reading and drawing in my bed. Sometimes you just need to turn your phone off and drink hot cinnamon apple tea.',
         backgroundColor: '#2AB565',
@@ -72,6 +80,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'sep-1',
         date: 'WEDNESDAY, SEP 28',
+        timestamp: new Date('2026-09-28T18:45:00Z').getTime(),
         title: 'Golden Hour Walk',
         titleEmoji: '🌅',
         body: 'The evening light filtering through the maple trees was absolutely breathtaking today. Felt so grounded and calm after a hectic week.',
@@ -82,7 +91,9 @@ export const INITIAL_SECTIONS: JournalSection[] = [
           body: '#6E3C04',
         },
         polaroid: {
+          id: 'fall',
           image: require('../../assets/pumpkin-patch-2.jpg'),
+          assetKey: 'pumpkin-patch-2.jpg',
           caption: 'Warm Sunlight ✨',
           tapeColor: 'rgba(255, 230, 150, 0.85)',
         },
@@ -93,6 +104,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'sep-2',
         date: 'SATURDAY, SEP 24',
+        timestamp: new Date('2026-09-24T10:30:00Z').getTime(),
         title: 'Farmers Market Haul',
         titleEmoji: '💐',
         body: 'Picked up fresh lavender bundles, warm artisan sourdough bread, and wildflowers. The entire apartment smells like fresh honey and blossoms.',
@@ -109,6 +121,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'sep-3',
         date: 'MONDAY, SEP 19',
+        timestamp: new Date('2026-09-19T15:00:00Z').getTime(),
         title: 'Art Studio Session',
         titleEmoji: '🎨',
         body: 'Tried water coloring botanical leaves in my sketchbook. Messy hands, quiet mind. Sometimes the unplanned strokes turn out to be the most beautiful.',
@@ -119,7 +132,9 @@ export const INITIAL_SECTIONS: JournalSection[] = [
           body: '#0A5246',
         },
         polaroid: {
+          id: 'latte',
           image: require('../../assets/matcha-latte.jpg'),
+          assetKey: 'matcha-latte.jpg',
           caption: 'Latte & Paints ☕',
           tapeColor: 'rgba(140, 230, 200, 0.8)',
         },
@@ -130,6 +145,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'sep-4',
         date: 'THURSDAY, SEP 15',
+        timestamp: new Date('2026-09-15T22:15:00Z').getTime(),
         title: 'Late Night Reading',
         titleEmoji: '📖',
         body: 'Finished the last three chapters with vanilla candlelight and lo-fi piano tunes playing softly. It was the exact slow recharge I needed.',
@@ -146,6 +162,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'sep-5',
         date: 'SUNDAY, SEP 04',
+        timestamp: new Date('2026-09-04T09:30:00Z').getTime(),
         title: 'Baking Cinnamon Rolls',
         titleEmoji: '🥐',
         body: 'Sunday morning dough kneading therapy! The sugary glaze dripped all over the counter, but the rolls came out warm, fluffy, and perfection.',
@@ -156,7 +173,9 @@ export const INITIAL_SECTIONS: JournalSection[] = [
           body: '#6E2306',
         },
         polaroid: {
+          id: 'sweet',
           image: require('../../assets/matcha-latte-2.jpg'),
+          assetKey: 'matcha-latte-2.jpg',
           caption: 'Sweet Morning 🍯',
           tapeColor: 'rgba(255, 200, 140, 0.8)',
         },
@@ -174,6 +193,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'aug-1',
         date: 'FRIDAY, AUG 28',
+        timestamp: new Date('2026-08-28T21:00:00Z').getTime(),
         title: 'Stargazing On The Hill',
         titleEmoji: '✨',
         body: 'Laid out a checkered blanket and watched shooting stars until midnight. The air was crisp and full of cricket songs.',
@@ -190,6 +210,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'aug-2',
         date: 'SUNDAY, AUG 16',
+        timestamp: new Date('2026-08-16T14:00:00Z').getTime(),
         title: 'Coastal Breeze & Journal',
         titleEmoji: '🌊',
         body: 'Sitting by the rocky cove with cool salt spray and my sketchbook was pure bliss. Watched sailboats glide across the horizon.',
@@ -200,7 +221,9 @@ export const INITIAL_SECTIONS: JournalSection[] = [
           body: '#0A4C25',
         },
         polaroid: {
+          id: 'sea',
           image: require('../../assets/matcha-cafe.jpg'),
+          assetKey: 'matcha-cafe.jpg',
           caption: 'By The Sea 🐚',
           tapeColor: 'rgba(180, 240, 230, 0.85)',
         },
@@ -211,6 +234,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'aug-3',
         date: 'THURSDAY, AUG 13',
+        timestamp: new Date('2026-08-13T12:30:00Z').getTime(),
         title: 'Vintage Flea Market',
         titleEmoji: '👒',
         body: 'Found an old leather-bound sketchbook and an amber glass bottle at the weekend vintage fair. Such hidden treasures!',
@@ -227,6 +251,7 @@ export const INITIAL_SECTIONS: JournalSection[] = [
       {
         id: 'aug-4',
         date: 'SATURDAY, AUG 01',
+        timestamp: new Date('2026-08-01T17:00:00Z').getTime(),
         title: 'Midsummer Peach Cobbler',
         titleEmoji: '🍑',
         body: 'Baked fresh peach cobbler with vanilla bean ice cream. Summer evenings with good friends and warm dessert are unmatched.',
@@ -237,7 +262,9 @@ export const INITIAL_SECTIONS: JournalSection[] = [
           body: '#73175A',
         },
         polaroid: {
+          id: 'peach',
           image: require('../../assets/clara-pumpkin.jpg'),
+          assetKey: 'clara-pumpkin.jpg',
           caption: 'Peachy Days 🍑',
           tapeColor: 'rgba(255, 215, 175, 0.85)',
         },
@@ -248,4 +275,3 @@ export const INITIAL_SECTIONS: JournalSection[] = [
     ],
   },
 ];
-
