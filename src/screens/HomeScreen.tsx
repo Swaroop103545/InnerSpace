@@ -441,7 +441,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                       accessibilityLabel="Open profile"
                     >
                       <Text style={styles.dashboardAvatarText}>
-                        {userName ? userName.charAt(0).toUpperCase() : 'E'}
+                        {userName ? userName.charAt(0).toUpperCase() : 'W'}
                       </Text>
                       <View style={styles.dashboardOnlineDot} />
                     </TouchableOpacity>
@@ -453,10 +453,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                   <View style={styles.dashboardWelcomeCopy}>
                     <Text style={styles.dashboardEyebrow}>YOUR SPACE, YOUR STORY</Text>
                     <Text style={styles.dashboardGreeting}>
-                      Welcome back, {userName || 'there'}.
+                      {userName ? `Welcome back, ${userName}.` : 'Welcome to InnerSpace.'}
                     </Text>
                     <Text style={styles.dashboardSubtitle}>
-                      {userSubtitle || 'A little time for yourself goes a long way.'}
+                      {userSubtitle || 'A quiet sanctuary for your daily reflections.'}
                     </Text>
                   </View>
                   <View style={styles.dashboardStreak}>
@@ -501,41 +501,43 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                 </TouchableOpacity>
 
                 {/* Journal feed toolbar */}
-                <View style={styles.dashboardFeedHeader}>
-                  <View>
-                    <Text style={styles.dashboardFeedEyebrow}>YOUR COLLECTION</Text>
-                    <Text style={styles.dashboardFeedTitle}>Journal entries</Text>
-                    <Text style={styles.dashboardFeedSubtitle}>
-                      {totalMatchingEntries} {totalMatchingEntries === 1 ? 'entry' : 'entries'} in your journal
-                    </Text>
+                {stats.totalEntries > 0 ? (
+                  <View style={styles.dashboardFeedHeader}>
+                    <View>
+                      <Text style={styles.dashboardFeedEyebrow}>YOUR COLLECTION</Text>
+                      <Text style={styles.dashboardFeedTitle}>Journal entries</Text>
+                      <Text style={styles.dashboardFeedSubtitle}>
+                        {totalMatchingEntries} {totalMatchingEntries === 1 ? 'entry' : 'entries'} in your journal
+                      </Text>
+                    </View>
+                    <View style={styles.dashboardFeedActions}>
+                      <TouchableOpacity
+                        onPress={handleSortPress}
+                        activeOpacity={0.7}
+                        style={styles.dashboardIconButton}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Sort entries, currently ${sortDescending ? 'newest first' : 'oldest first'}`}
+                      >
+                        <Ionicons name="swap-vertical" size={17} color="#344054" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => {
+                          animateNext();
+                          dispatch(toggleSearchBar());
+                        }}
+                        activeOpacity={0.7}
+                        style={[
+                          styles.dashboardIconButton,
+                          (isSearchBarVisible || hasActiveFilters) && styles.dashboardIconButtonActive,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel="Search and filter entries"
+                      >
+                        <Feather name="search" size={17} color="#344054" />
+                      </TouchableOpacity>
+                    </View>
                   </View>
-                  <View style={styles.dashboardFeedActions}>
-                    <TouchableOpacity
-                      onPress={handleSortPress}
-                      activeOpacity={0.7}
-                      style={styles.dashboardIconButton}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Sort entries, currently ${sortDescending ? 'newest first' : 'oldest first'}`}
-                    >
-                      <Ionicons name="swap-vertical" size={17} color="#344054" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => {
-                        animateNext();
-                        dispatch(toggleSearchBar());
-                      }}
-                      activeOpacity={0.7}
-                      style={[
-                        styles.dashboardIconButton,
-                        (isSearchBarVisible || hasActiveFilters) && styles.dashboardIconButtonActive,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityLabel="Search and filter entries"
-                    >
-                      <Feather name="search" size={17} color="#344054" />
-                    </TouchableOpacity>
-                  </View>
-                </View>
+                ) : null}
 
                 {/* Search and filters */}
                 {isSearchBarVisible || hasActiveFilters ? (
@@ -621,37 +623,95 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                     Loading your reflections and moments from the cloud.
                   </Text>
                 </View>
-              ) : (
+              ) : hasActiveFilters ? (
                 <View style={styles.emptyContainer}>
-                  <MaterialCommunityIcons
-                    name="notebook-outline"
-                    size={54}
-                    color="#C6BDD2"
-                  />
-                  <Text style={styles.emptyTitle}>No Entries Found</Text>
+                  <View style={styles.filterEmptyIconBadge}>
+                    <Ionicons name="search-outline" size={28} color="#7663A8" />
+                  </View>
+                  <Text style={styles.emptyTitle}>No Matching Reflections</Text>
                   <Text style={styles.emptyDescription}>
-                    {hasActiveFilters
-                      ? 'No journal entries match your current search and filters.'
-                      : 'Your inner space is ready for your first reflection.'}
+                    No journal reflections match your current search and filters.
                   </Text>
-                  {hasActiveFilters ? (
-                    <TouchableOpacity
-                      style={styles.emptyActionBtn}
-                      onPress={() => {
-                        animateNext();
-                        dispatch(clearFilters());
-                      }}
-                    >
-                      <Text style={styles.emptyActionText}>Reset Filters</Text>
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity
-                      style={styles.emptyActionBtn}
-                      onPress={handleAddPress}
-                    >
-                      <Text style={styles.emptyActionText}>+ Write New Entry</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity
+                    style={styles.emptyActionBtn}
+                    onPress={() => {
+                      animateNext();
+                      dispatch(clearFilters());
+                    }}
+                  >
+                    <Text style={styles.emptyActionText}>Reset Filters</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.sereneEmptyCard}>
+                  {/* Decorative illustration */}
+                  <View style={styles.sereneIllustration}>
+                    <View style={styles.sereneCircleOuter} />
+                    <View style={styles.sereneCircleInner} />
+                    <View style={styles.sereneIconCircle}>
+                      <MaterialCommunityIcons
+                        name="book-open-page-variant-outline"
+                        size={38}
+                        color="#7663A8"
+                      />
+                    </View>
+                    <View style={styles.sereneSparkleTop}>
+                      <Ionicons name="sparkles" size={17} color="#BFA3DC" />
+                    </View>
+                    <View style={styles.sereneLeafBottom}>
+                      <Ionicons name="leaf-outline" size={18} color="#9FC4B0" />
+                    </View>
+                  </View>
+
+                  <Text style={styles.sereneEyebrow}>YOUR PRIVATE SPACE</Text>
+                  <Text style={styles.sereneTitle}>A Blank Page Awaits</Text>
+                  <Text style={styles.sereneDescription}>
+                    Your journal is quiet and ready. Take a moment to capture what matters today &mdash; a memory, a feeling, or a quiet realization.
+                  </Text>
+
+                  {/* Gentle prompts */}
+                  <View style={styles.promptsContainer}>
+                    <Text style={styles.promptsLabel}>NEED INSPIRATION?</Text>
+                    <View style={styles.promptsList}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        style={styles.promptChip}
+                        onPress={handleAddPress}
+                      >
+                        <Text style={styles.promptChipEmoji}>✨</Text>
+                        <Text style={styles.promptChipText}>What made you smile today?</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        style={styles.promptChip}
+                        onPress={handleAddPress}
+                      >
+                        <Text style={styles.promptChipEmoji}>☕</Text>
+                        <Text style={styles.promptChipText}>A quiet moment I loved</Text>
+                      </TouchableOpacity>
+
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        style={styles.promptChip}
+                        onPress={handleAddPress}
+                      >
+                        <Text style={styles.promptChipEmoji}>🌿</Text>
+                        <Text style={styles.promptChipText}>Something I am grateful for</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Primary CTA Button */}
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={styles.serenePrimaryBtn}
+                    onPress={handleAddPress}
+                  >
+                    <Feather name="edit-3" size={17} color="#FFFFFF" />
+                    <Text style={styles.serenePrimaryBtnText}>Write Your First Reflection</Text>
+                    <Feather name="arrow-right" size={16} color="#FFFFFF" />
+                  </TouchableOpacity>
                 </View>
               )
             }
@@ -860,6 +920,155 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 13.5,
     fontWeight: '700',
+  },
+  filterEmptyIconBadge: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#F1ECF8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  sereneEmptyCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    paddingVertical: 36,
+    paddingHorizontal: 22,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 40,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#ECE6F4',
+    shadowColor: '#43296B',
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  sereneIllustration: {
+    width: 120,
+    height: 110,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  sereneCircleOuter: {
+    position: 'absolute',
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    backgroundColor: '#F6F2FA',
+  },
+  sereneCircleInner: {
+    position: 'absolute',
+    width: 82,
+    height: 82,
+    borderRadius: 41,
+    backgroundColor: '#ECE3F4',
+  },
+  sereneIconCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#53347C',
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  sereneSparkleTop: {
+    position: 'absolute',
+    top: 4,
+    right: 14,
+  },
+  sereneLeafBottom: {
+    position: 'absolute',
+    bottom: 6,
+    left: 14,
+  },
+  sereneEyebrow: {
+    color: '#7663A8',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 2,
+    marginBottom: 7,
+  },
+  sereneTitle: {
+    color: '#282136',
+    fontSize: 22,
+    fontWeight: '700',
+    letterSpacing: -0.4,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  sereneDescription: {
+    color: '#716A7D',
+    fontSize: 13,
+    lineHeight: 20,
+    textAlign: 'center',
+    maxWidth: 295,
+    marginBottom: 20,
+  },
+  promptsContainer: {
+    width: '100%',
+    marginBottom: 24,
+  },
+  promptsLabel: {
+    color: '#9C94A7',
+    fontSize: 9.5,
+    fontWeight: '800',
+    letterSpacing: 1.5,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  promptsList: {
+    gap: 8,
+  },
+  promptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: '#F8F6FB',
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: '#ECE7F3',
+    gap: 9,
+  },
+  promptChipEmoji: {
+    fontSize: 15,
+  },
+  promptChipText: {
+    color: '#423B4E',
+    fontSize: 12.5,
+    fontWeight: '600',
+    flex: 1,
+  },
+  serenePrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#7663A8',
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 16,
+    gap: 10,
+    shadowColor: '#53347C',
+    shadowOpacity: 0.22,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  serenePrimaryBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
   tabContentScroll: {
     flex: 1,

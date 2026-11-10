@@ -61,7 +61,7 @@ export default function Index() {
             userProfile?.name ||
             firebaseUser.displayName ||
             firebaseUser.email?.split('@')[0] ||
-            'Emma';
+            'Writer';
 
           dispatch(
             setFullUserProfile({
@@ -70,7 +70,7 @@ export default function Index() {
               email: firebaseUser.email || '',
               subtitle:
                 userProfile?.subtitle || 'Tell me about your day today',
-              streakDays: userProfile?.streakDays ?? 1,
+              streakDays: userProfile?.streakDays ?? 0,
               photoURL: firebaseUser.photoURL,
             })
           );
@@ -79,20 +79,8 @@ export default function Index() {
           dispatch(setIsLoadingEntries(true));
           unsubscribeJournalRef.current = subscribeToJournalEntries(
             firebaseUser.uid,
-            async (entries) => {
-              if (entries.length === 0) {
-                // If brand new user with no entries, seed starter entries
-                try {
-                  const seeded = await seedDefaultEntriesIfEmpty(
-                    firebaseUser.uid
-                  );
-                  dispatch(setEntries(seeded));
-                } catch {
-                  dispatch(setEntries([]));
-                }
-              } else {
-                dispatch(setEntries(entries));
-              }
+            (entries) => {
+              dispatch(setEntries(entries));
             },
             (error) => {
               console.warn('Firestore subscription notice:', error.message);
@@ -143,14 +131,14 @@ export default function Index() {
                 const derivedName = prefix
                   ? prefix.charAt(0).toUpperCase() +
                     prefix.slice(1).replace(/[._-]/g, ' ')
-                  : 'Emma';
+                  : 'Writer';
                 dispatch(
                   setFullUserProfile({
                     uid: 'demo-local-user',
                     email: trimmedEmail,
                     name: derivedName,
                     subtitle: 'Tell me about your day today',
-                    streakDays: 14,
+                    streakDays: 0,
                   })
                 );
               },

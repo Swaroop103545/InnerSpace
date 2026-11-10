@@ -33,6 +33,38 @@ const getEntryDocRef = (userId: string, entryId: string) => {
   return doc(db, 'users', userId, 'entries', entryId);
 };
 
+// Known demo IDs and titles to guarantee demo data is NEVER displayed by default
+const DEMO_ENTRY_IDS = new Set([
+  'oct-1', 'oct-2', 'oct-3',
+  'sep-1', 'sep-2', 'sep-3', 'sep-4', 'sep-5',
+  'aug-1', 'aug-2', 'aug-3', 'aug-4',
+]);
+
+const DEMO_TITLES = new Set([
+  'sunny coffee house',
+  'pumpkin patch autumn',
+  'quiet rainy journaling',
+  'golden hour walk',
+  'farmers market haul',
+  'art studio session',
+  'late night reading',
+  'baking cinnamon rolls',
+  'stargazing on the hill',
+  'coastal breeze & journal',
+  'vintage flea market',
+  'midsummer peach cobbler',
+]);
+
+/**
+ * Checks if an entry is demo/dummy data
+ */
+export function isDemoEntry(entry: Partial<JournalEntry>): boolean {
+  if (!entry) return false;
+  if (entry.id && DEMO_ENTRY_IDS.has(entry.id)) return true;
+  if (entry.title && DEMO_TITLES.has(entry.title.trim().toLowerCase())) return true;
+  return false;
+}
+
 /**
  * Strips undefined values and sanitizes objects so Firestore accepts them cleanly
  */
@@ -182,7 +214,11 @@ export async function getJournalEntries(userId: string): Promise<JournalEntry[]>
   const querySnapshot = await getDocs(q);
   const entries: JournalEntry[] = [];
   querySnapshot.forEach((docSnap) => {
-    entries.push(mapDocToJournalEntry(docSnap.id, docSnap.data()));
+    const entry = mapDocToJournalEntry(docSnap.id, docSnap.data());
+    // Only return user entries, never demo entries
+    if (!isDemoEntry(entry)) {
+      entries.push(entry);
+    }
   });
 
   return entries;
@@ -210,9 +246,25 @@ export function subscribeToJournalEntries(
     q,
     (snapshot) => {
       const entries: JournalEntry[] = [];
+      const demoDocsToDelete: any[] = [];
+
       snapshot.forEach((docSnap) => {
-        entries.push(mapDocToJournalEntry(docSnap.id, docSnap.data()));
+        const entry = mapDocToJournalEntry(docSnap.id, docSnap.data());
+        if (isDemoEntry(entry)) {
+          // Identify any legacy demo documents in Firestore to clean them up
+          demoDocsToDelete.push(docSnap.ref);
+        } else {
+          entries.push(entry);
+        }
       });
+
+      // Silently purge demo entries from Firestore in background so Firestore console remains clean
+      if (demoDocsToDelete.length > 0) {
+        Promise.all(demoDocsToDelete.map((ref) => deleteDoc(ref))).catch((err) =>
+          console.warn('Notice: Background demo data cleanup in Firestore:', err)
+        );
+      }
+
       onUpdate(entries);
     },
     (error) => {
@@ -275,25 +327,27 @@ export async function toggleFavoriteJournalEntry(
 }
 
 /**
- * 5. BATCH CREATE / SYNC: Store all journal entries to Firebase Firestore
- * Writes all entries using an atomic Firestore writeBatch
+ * 5. BATCH CREATE / SYNC: Store journal entries to Firebase Firestore
+ * Writes entries using an atomic Firestore writeBatch
  */
 export async function storeAllEntriesToFirestore(
   userId: string,
-  entries?: JournalEntry[]
+  entries: JournalEntry[] = []
 ): Promise<number> {
   if (!userId) {
     throw new Error('User ID is required to store entries to Firebase.');
   }
 
-  const entriesToSave =
-    entries && entries.length > 0
-      ? entries
-      : INITIAL_SECTIONS.flatMap((sec) => sec.data);
+  // Ensure demo entries are never saved to Firebase
+  const realEntries = (entries || []).filter((e) => !isDemoEntry(e));
+
+  if (realEntries.length === 0) {
+    return 0;
+  }
 
   const batch = writeBatch(db);
 
-  for (const entry of entriesToSave) {
+  for (const entry of realEntries) {
     const docRef = getEntryDocRef(userId, entry.id);
     const sanitized = sanitizeEntryForFirestore(entry);
     batch.set(
@@ -308,42 +362,38 @@ export async function storeAllEntriesToFirestore(
   }
 
   await batch.commit();
-  return entriesToSave.length;
+  return realEntries.length;
 }
 
 /**
- * Seed initial starter entries into Firestore if collection is empty
+ * Retrieve user's Firestore entries
  */
 export async function seedDefaultEntriesIfEmpty(
   userId: string
 ): Promise<JournalEntry[]> {
   if (!userId) return [];
-
-  const existing = await getJournalEntries(userId);
-  if (existing.length > 0) {
-    return existing;
-  }
-
-  const demoEntries = INITIAL_SECTIONS.flatMap((sec) => sec.data);
-  await storeAllEntriesToFirestore(userId, demoEntries);
-  return demoEntries;
+  return await getJournalEntries(userId);
 }
 
 /**
- * Reset user entries back to default demo entries in Firestore
+ * Clear all journal entries for a user in Firestore
  */
-export async function resetUserEntriesToDemo(userId: string): Promise<void> {
+export async function clearAllUserEntries(userId: string): Promise<void> {
   if (!userId) return;
 
-  // 1. Delete all existing entries
   const currentEntries = await getJournalEntries(userId);
+  if (currentEntries.length === 0) return;
+
   const deleteBatch = writeBatch(db);
   for (const entry of currentEntries) {
     deleteBatch.delete(getEntryDocRef(userId, entry.id));
   }
   await deleteBatch.commit();
+}
 
-  // 2. Re-add demo entries
-  const demoEntries = INITIAL_SECTIONS.flatMap((sec) => sec.data);
-  await storeAllEntriesToFirestore(userId, demoEntries);
+/**
+ * Reset entries: clears all entries in Firestore
+ */
+export async function resetUserEntriesToDemo(userId: string): Promise<void> {
+  await clearAllUserEntries(userId);
 }

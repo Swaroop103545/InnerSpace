@@ -17,7 +17,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  name = 'Emma',
+  name = 'Writer',
   subtitle = 'A little space for your thoughts.',
   avatarUri = require('../../assets/emma-profile.jpg'),
   onPressAvatar,

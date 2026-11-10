@@ -126,9 +126,9 @@ export async function registerUser(
     const initialProfile: UserProfileData = {
       uid: user.uid,
       email: user.email,
-      name: trimmedName || user.email?.split('@')[0] || 'Emma',
+      name: trimmedName || user.email?.split('@')[0] || 'Writer',
       subtitle: 'Tell me about your day today',
-      streakDays: 1,
+      streakDays: 0,
       createdAt: Date.now(),
     };
 

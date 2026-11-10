@@ -22,6 +22,7 @@ type CalendarJournalEntry = {
 type CalendarScreenProps = {
   entries: CalendarJournalEntry[];
   onOpenEntry?: (entry: CalendarJournalEntry) => void;
+  onAddEntry?: (dateKey?: string) => void;
 };
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -77,6 +78,7 @@ const formatEntryTime = (timestamp?: string | number) => {
 const CalendarScreen: React.FC<CalendarScreenProps> = ({
   entries = [],
   onOpenEntry,
+  onAddEntry,
 }) => {
   const today = new Date();
 
@@ -193,8 +195,9 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
         <View style={styles.summaryContent}>
           <Text style={styles.summaryLabel}>MONTHLY ARCHIVE</Text>
           <Text style={styles.summaryValue}>
-            {monthEntriesCount}{' '}
-            {monthEntriesCount === 1 ? 'memory' : 'memories'} recorded
+            {monthEntriesCount === 0
+              ? 'No memories recorded this month'
+              : `${monthEntriesCount} ${monthEntriesCount === 1 ? 'memory' : 'memories'} recorded`}
           </Text>
         </View>
 
@@ -410,6 +413,17 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
               No journal entries for this day. Make room for a new memory
               whenever you&apos;re ready.
             </Text>
+
+            {onAddEntry ? (
+              <TouchableOpacity
+                style={styles.emptyAddBtn}
+                activeOpacity={0.85}
+                onPress={() => onAddEntry(selectedDate)}
+              >
+                <Ionicons name="create-outline" size={15} color="#FFFFFF" />
+                <Text style={styles.emptyAddBtnText}>Write a Reflection</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
       </View>
@@ -770,6 +784,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: 'center',
     marginTop: 7,
+  },
+  emptyAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#7864B5',
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginTop: 16,
+    shadowColor: '#7864B5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  emptyAddBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '600',
   },
   footer: {
     flexDirection: 'row',
