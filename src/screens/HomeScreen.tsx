@@ -72,6 +72,7 @@ import {
 } from '../store/slices/userSlice';
 import UsersRender from '@/components/users';
 import CalendarScreen from './CalendarScreen';
+import ProfileScreen from './ProfileScreen';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -171,6 +172,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const userSubtitle = useAppSelector(selectUserSubtitle);
   const userStreakDays = useAppSelector(selectUserStreakDays);
   const stats = useAppSelector(selectJournalStats);
+
+  // const entryDate = entry.date ? new Date(entry.date) : new Date(NaN);
 
   const [fontsLoaded] = useFonts({
     PlayfairDisplay_700Bold,
@@ -410,155 +413,184 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   );
 
   // Render Profile Tab
+  // const renderProfileView = () => (
+  //   <ScrollView
+  //     style={styles.tabContentScroll}
+  //     contentContainerStyle={styles.tabContentContainer}
+  //     showsVerticalScrollIndicator={false}
+  //   >
+  //     <View style={styles.tabHeader}>
+  //       <Text
+  //         style={[
+  //           styles.tabTitle,
+  //           fontsLoaded ? { fontFamily: 'PlayfairDisplay_700Bold' } : null,
+  //         ]}
+  //       >
+  //         Author Profile
+  //       </Text>
+  //       <Text style={styles.tabSubtitle}>Manage your journal persona & preferences</Text>
+  //     </View>
+
+  //     <View style={styles.profileCard}>
+  //       <View style={styles.profileAvatarLarge}>
+  //         <Text style={styles.profileAvatarInitial}>
+  //           {userName ? userName[0].toUpperCase() : 'E'}
+  //         </Text>
+  //       </View>
+
+  //       <Text style={styles.profileName}>{userName}</Text>
+  //       {userEmail ? <Text style={styles.profileEmail}>{userEmail}</Text> : null}
+  //       <Text style={styles.profileSubtitle}>{userSubtitle}</Text>
+
+  //       <View style={styles.profileStatsRow}>
+  //         <View style={styles.profileStatItem}>
+  //           <Text style={styles.profileStatValue}>{stats.totalEntries}</Text>
+  //           <Text style={styles.profileStatLabel}>Entries</Text>
+  //         </View>
+  //         <View style={styles.profileStatDivider} />
+  //         <View style={styles.profileStatItem}>
+  //           <Text style={styles.profileStatValue}>{userStreakDays}</Text>
+  //           <Text style={styles.profileStatLabel}>Day Streak</Text>
+  //         </View>
+  //         <View style={styles.profileStatDivider} />
+  //         <View style={styles.profileStatItem}>
+  //           <Text style={styles.profileStatValue}>{stats.totalPolaroids}</Text>
+  //           <Text style={styles.profileStatLabel}>Photos</Text>
+  //         </View>
+  //       </View>
+  //     </View>
+
+  //     {/* Profile Actions */}
+  //     <View style={styles.profileActionsContainer}>
+  //       <TouchableOpacity
+  //         style={styles.profileActionRow}
+  //         activeOpacity={0.7}
+  //         onPress={() => {
+  //           Alert.prompt
+  //             ? Alert.prompt(
+  //               'Edit Name',
+  //               'Enter your preferred name:',
+  //               (text) => {
+  //                 if (text && text.trim()) {
+  //                   dispatch(updateProfile({ name: text.trim() }));
+  //                 }
+  //               },
+  //               'plain-text',
+  //               userName
+  //             )
+  //             : Alert.alert('Profile', `Currently journaling as ${userName}`);
+  //         }}
+  //       >
+  //         <View style={styles.profileActionLeft}>
+  //           <Feather name="user" size={18} color="#6E3DE6" />
+  //           <Text style={styles.profileActionText}>Name: {userName}</Text>
+  //         </View>
+  //         <Feather name="chevron-right" size={16} color="#A098AE" />
+  //       </TouchableOpacity>
+
+  //       <TouchableOpacity
+  //         style={styles.profileActionRow}
+  //         activeOpacity={0.7}
+  //         onPress={() => {
+  //           Alert.alert(
+  //             'Reset Demo Data?',
+  //             'This will reset all sections and entries to the initial demo entries.',
+  //             [
+  //               { text: 'Cancel', style: 'cancel' },
+  //               {
+  //                 text: 'Reset Data',
+  //                 style: 'destructive',
+  //                 onPress: () => {
+  //                   animateNext();
+  //                   dispatch(resetToInitialData());
+  //                   dispatch(setActiveTab('home'));
+  //                 },
+  //               },
+  //             ]
+  //           );
+  //         }}
+  //       >
+  //         <View style={styles.profileActionLeft}>
+  //           <Feather name="refresh-cw" size={18} color="#E56338" />
+  //           <Text style={[styles.profileActionText, { color: '#E56338' }]}>
+  //             Reset to Demo Entries
+  //           </Text>
+  //         </View>
+  //         <Feather name="chevron-right" size={16} color="#A098AE" />
+  //       </TouchableOpacity>
+
+  //       <TouchableOpacity
+  //         style={styles.profileActionRow}
+  //         activeOpacity={0.7}
+  //         onPress={() => {
+  //           Alert.alert(
+  //             'Sign Out',
+  //             'Are you sure you want to sign out of InnerSpace?',
+  //             [
+  //               { text: 'Cancel', style: 'cancel' },
+  //               {
+  //                 text: 'Sign Out',
+  //                 style: 'destructive',
+  //                 onPress: () => {
+  //                   if (onLogout) {
+  //                     onLogout();
+  //                   } else {
+  //                     dispatch(logout());
+  //                   }
+  //                 },
+  //               },
+  //             ]
+  //           );
+  //         }}
+  //       >
+  //         <View style={styles.profileActionLeft}>
+  //           <Feather name="log-out" size={18} color="#D9383A" />
+  //           <Text style={[styles.profileActionText, { color: '#D9383A' }]}>
+  //             Sign Out
+  //           </Text>
+  //         </View>
+  //         <Feather name="chevron-right" size={16} color="#A098AE" />
+  //       </TouchableOpacity>
+  //     </View>
+
+  //     <TouchableOpacity
+  //       style={styles.backButton}
+  //       activeOpacity={0.8}
+  //       onPress={() => dispatch(setActiveTab('home'))}
+  //     >
+  //       <Text style={styles.backButtonText}>Return to Journal</Text>
+  //     </TouchableOpacity>
+  //   </ScrollView>
+  // );
+
   const renderProfileView = () => (
-    <ScrollView
-      style={styles.tabContentScroll}
-      contentContainerStyle={styles.tabContentContainer}
-      showsVerticalScrollIndicator={false}
-    >
-      <View style={styles.tabHeader}>
-        <Text
-          style={[
-            styles.tabTitle,
-            fontsLoaded ? { fontFamily: 'PlayfairDisplay_700Bold' } : null,
-          ]}
-        >
-          Author Profile
-        </Text>
-        <Text style={styles.tabSubtitle}>Manage your journal persona & preferences</Text>
-      </View>
-
-      <View style={styles.profileCard}>
-        <View style={styles.profileAvatarLarge}>
-          <Text style={styles.profileAvatarInitial}>
-            {userName ? userName[0].toUpperCase() : 'E'}
-          </Text>
-        </View>
-
-        <Text style={styles.profileName}>{userName}</Text>
-        {userEmail ? <Text style={styles.profileEmail}>{userEmail}</Text> : null}
-        <Text style={styles.profileSubtitle}>{userSubtitle}</Text>
-
-        <View style={styles.profileStatsRow}>
-          <View style={styles.profileStatItem}>
-            <Text style={styles.profileStatValue}>{stats.totalEntries}</Text>
-            <Text style={styles.profileStatLabel}>Entries</Text>
-          </View>
-          <View style={styles.profileStatDivider} />
-          <View style={styles.profileStatItem}>
-            <Text style={styles.profileStatValue}>{userStreakDays}</Text>
-            <Text style={styles.profileStatLabel}>Day Streak</Text>
-          </View>
-          <View style={styles.profileStatDivider} />
-          <View style={styles.profileStatItem}>
-            <Text style={styles.profileStatValue}>{stats.totalPolaroids}</Text>
-            <Text style={styles.profileStatLabel}>Photos</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Profile Actions */}
-      <View style={styles.profileActionsContainer}>
-        <TouchableOpacity
-          style={styles.profileActionRow}
-          activeOpacity={0.7}
-          onPress={() => {
-            Alert.prompt
-              ? Alert.prompt(
-                'Edit Name',
-                'Enter your preferred name:',
-                (text) => {
-                  if (text && text.trim()) {
-                    dispatch(updateProfile({ name: text.trim() }));
-                  }
-                },
-                'plain-text',
-                userName
-              )
-              : Alert.alert('Profile', `Currently journaling as ${userName}`);
-          }}
-        >
-          <View style={styles.profileActionLeft}>
-            <Feather name="user" size={18} color="#6E3DE6" />
-            <Text style={styles.profileActionText}>Name: {userName}</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color="#A098AE" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.profileActionRow}
-          activeOpacity={0.7}
-          onPress={() => {
-            Alert.alert(
-              'Reset Demo Data?',
-              'This will reset all sections and entries to the initial demo entries.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Reset Data',
-                  style: 'destructive',
-                  onPress: () => {
-                    animateNext();
-                    dispatch(resetToInitialData());
-                    dispatch(setActiveTab('home'));
-                  },
-                },
-              ]
-            );
-          }}
-        >
-          <View style={styles.profileActionLeft}>
-            <Feather name="refresh-cw" size={18} color="#E56338" />
-            <Text style={[styles.profileActionText, { color: '#E56338' }]}>
-              Reset to Demo Entries
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={16} color="#A098AE" />
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.profileActionRow}
-          activeOpacity={0.7}
-          onPress={() => {
-            Alert.alert(
-              'Sign Out',
-              'Are you sure you want to sign out of InnerSpace?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Sign Out',
-                  style: 'destructive',
-                  onPress: () => {
-                    if (onLogout) {
-                      onLogout();
-                    } else {
-                      dispatch(logout());
-                    }
-                  },
-                },
-              ]
-            );
-          }}
-        >
-          <View style={styles.profileActionLeft}>
-            <Feather name="log-out" size={18} color="#D9383A" />
-            <Text style={[styles.profileActionText, { color: '#D9383A' }]}>
-              Sign Out
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={16} color="#A098AE" />
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity
-        style={styles.backButton}
-        activeOpacity={0.8}
-        onPress={() => dispatch(setActiveTab('home'))}
-      >
-        <Text style={styles.backButtonText}>Return to Journal</Text>
-      </TouchableOpacity>
-    </ScrollView>
-  );
+  <ProfileScreen
+      userName={userName}
+      userEmail={userEmail}
+      userSubtitle={userSubtitle}
+      userStreakDays={userStreakDays}
+      stats={stats}
+      // entries={entries}
+      fontsLoaded={fontsLoaded}
+      onEditName={(name) => {
+        dispatch(updateProfile({ name }));
+      } }
+      onResetData={() => {
+        animateNext();
+        dispatch(resetToInitialData());
+        dispatch(setActiveTab('home'));
+      } }
+      onLogout={() => {
+        if (onLogout) {
+          onLogout();
+        } else {
+          dispatch(logout());
+        }
+      } }
+      onReturnToJournal={() => {
+        dispatch(setActiveTab('home'));
+      } } entries={[]}  />
+);
 
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
