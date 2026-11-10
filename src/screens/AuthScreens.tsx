@@ -388,7 +388,7 @@ export const LoginScreen: React.FC<AuthScreenProps> = ({
         <View style={styles.quoteContainer}>
           <Ionicons name="leaf-outline" size={17} color="#A18DBE" />
           <Text style={styles.quoteText}>
-            "A little space for a lot of thoughts."
+            &ldquo;A little space for a lot of thoughts.&rdquo;
           </Text>
         </View>
       </View>
@@ -587,7 +587,7 @@ export const RegisterScreen: React.FC<AuthScreenProps> = ({
         <View style={styles.quoteContainer}>
           <Ionicons name="heart-outline" size={17} color="#C58F9B" />
           <Text style={styles.quoteText}>
-            "Every meaningful journey begins with a page."
+            &ldquo;Every meaningful journey begins with a page.&rdquo;
           </Text>
         </View>
       </View>

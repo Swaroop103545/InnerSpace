@@ -31,6 +31,7 @@ type ProfileScreenProps = {
 
   onEditName: (name: string) => void;
   onResetData: () => void;
+  onSyncAllToFirebase?: () => void;
   onLogout: () => void;
   onReturnToJournal: () => void;
 };
@@ -45,13 +46,13 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   fontsLoaded = false,
   onEditName,
   onResetData,
+  onSyncAllToFirebase,
   onLogout,
   onReturnToJournal,
 }) => {
-  const safeEntries = Array.isArray(entries) ? entries : [];
-
   // Weekly analytics
   const weeklyActivity = useMemo(() => {
+    const safeEntries = Array.isArray(entries) ? entries : [];
     const today = new Date();
 
     const days = Array.from({ length: 7 }, (_, index) => {
@@ -86,25 +87,27 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
       activeDays: days.filter((day) => day.count > 0).length,
       max: Math.max(...days.map((day) => day.count), 1),
     };
-  }, [safeEntries]);
+  }, [entries]);
 
   const handleEditName = () => {
-    Alert.prompt
-      ? Alert.prompt(
-          'Edit Name',
-          'Enter your preferred name:',
-          (text) => {
-            if (text?.trim()) {
-              onEditName(text.trim());
-            }
-          },
-          'plain-text',
-          userName
-        )
-      : Alert.alert(
-          'Edit Name',
-          'Name editing through the quick prompt is available on iOS.'
-        );
+    if (Alert.prompt) {
+      Alert.prompt(
+        'Edit Name',
+        'Enter your preferred name:',
+        (text) => {
+          if (text?.trim()) {
+            onEditName(text.trim());
+          }
+        },
+        'plain-text',
+        userName
+      );
+    } else {
+      Alert.alert(
+        'Edit Name',
+        'Name editing through the quick prompt is available on iOS.'
+      );
+    }
   };
 
   const handleResetData = () => {
@@ -210,7 +213,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <View style={styles.divider} />
 
         <Text style={styles.quote}>
-          "{userSubtitle || 'Every page holds a piece of your story.'}"
+          &ldquo;{userSubtitle || 'Every page holds a piece of your story.'}&rdquo;
         </Text>
 
         <View style={styles.authorStats}>
@@ -415,6 +418,19 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           iconStyle={styles.purpleIcon}
           onPress={handleEditName}
         />
+
+        {onSyncAllToFirebase ? (
+          <>
+            <View style={styles.settingDivider} />
+            <SettingRow
+              icon="cloud"
+              title="Sync to Firebase"
+              description="Store all journal entries in the cloud"
+              iconStyle={styles.blueIcon}
+              onPress={onSyncAllToFirebase}
+            />
+          </>
+        ) : null}
 
         <View style={styles.settingDivider} />
 

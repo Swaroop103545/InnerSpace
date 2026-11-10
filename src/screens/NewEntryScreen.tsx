@@ -961,7 +961,7 @@ export const NewEntryScreen: React.FC<NewEntryScreenProps> = ({
           <View>
             <View style={styles.sheetHeaderRow}>
               <Text style={styles.sheetTitle}>
-                Today's Weather
+                Today&apos;s Weather
               </Text>
 
               {selectedWeather ? (

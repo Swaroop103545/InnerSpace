@@ -9,6 +9,7 @@ export interface JournalState {
   searchQuery: string;
   selectedMoodFilter: string | null;
   selectedTagFilter: string | null;
+  isLoadingEntries: boolean;
 }
 
 const initialState: JournalState = {
@@ -18,6 +19,7 @@ const initialState: JournalState = {
   searchQuery: '',
   selectedMoodFilter: null,
   selectedTagFilter: null,
+  isLoadingEntries: false,
 };
 
 const MONTH_NAMES = [
@@ -40,7 +42,7 @@ const MONTH_ABBRS: Record<string, { full: string; code: string }> = {
   DEC: { full: 'DECEMBER', code: 'dec' },
 };
 
-function resolveSectionForEntry(entry: JournalEntry): {
+export function resolveSectionForEntry(entry: JournalEntry): {
   id: string;
   month: string;
   year: string;
@@ -66,17 +68,53 @@ function resolveSectionForEntry(entry: JournalEntry): {
   return { id, month, year };
 }
 
+export function groupEntriesIntoSections(entries: JournalEntry[]): JournalSection[] {
+  const map: Map<string, { id: string; month: string; year: string; data: JournalEntry[] }> = new Map();
+
+  for (const entry of entries) {
+    const { id, month, year } = resolveSectionForEntry(entry);
+    if (!map.has(id)) {
+      map.set(id, { id, month, year, data: [] });
+    }
+    map.get(id)!.data.push(entry);
+  }
+
+  // Sort entries within each section by timestamp descending
+  return Array.from(map.values()).map((section) => ({
+    ...section,
+    data: [...section.data].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0)),
+  }));
+}
+
 export const journalSlice = createSlice({
   name: 'journal',
   initialState,
   reducers: {
+    setIsLoadingEntries: (state, action: PayloadAction<boolean>) => {
+      state.isLoadingEntries = action.payload;
+    },
+
+    setEntries: (state, action: PayloadAction<JournalEntry[]>) => {
+      const entries = action.payload;
+      if (entries.length === 0) {
+        state.sections = [];
+      } else {
+        state.sections = groupEntriesIntoSections(entries);
+      }
+      state.isLoadingEntries = false;
+    },
+
     addEntry: (state, action: PayloadAction<JournalEntry>) => {
       const entry = action.payload;
       const { id: sectionId, month, year } = resolveSectionForEntry(entry);
 
       const existingSectionIndex = state.sections.findIndex((s) => s.id === sectionId);
       if (existingSectionIndex >= 0) {
-        state.sections[existingSectionIndex].data.unshift(entry);
+        // Prevent duplicate IDs if re-inserted
+        state.sections[existingSectionIndex].data = [
+          entry,
+          ...state.sections[existingSectionIndex].data.filter((e) => e.id !== entry.id),
+        ];
       } else {
         const newSection: JournalSection = {
           id: sectionId,
@@ -181,11 +219,14 @@ export const journalSlice = createSlice({
       state.searchQuery = '';
       state.selectedMoodFilter = null;
       state.selectedTagFilter = null;
+      state.isLoadingEntries = false;
     },
   },
 });
 
 export const {
+  setIsLoadingEntries,
+  setEntries,
   addEntry,
   updateEntry,
   deleteEntry,
@@ -211,6 +252,7 @@ export const selectCollapsedSections = (state: { journal: JournalState }) => sta
 export const selectSearchQuery = (state: { journal: JournalState }) => state.journal.searchQuery;
 export const selectMoodFilter = (state: { journal: JournalState }) => state.journal.selectedMoodFilter;
 export const selectTagFilter = (state: { journal: JournalState }) => state.journal.selectedTagFilter;
+export const selectIsLoadingEntries = (state: { journal: JournalState }) => state.journal.isLoadingEntries;
 
 // Derived memoized selector: displayed sections with filtering & sorting applied
 export const selectDisplayedSections = createSelector(
@@ -332,4 +374,3 @@ export const selectJournalStats = createSelector(
 );
 
 export default journalSlice.reducer;
-

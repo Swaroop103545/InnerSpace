@@ -158,9 +158,6 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
     setSelectedDate(getDateKey(today));
   };
 
-  const isCurrentMonth =
-    today.getFullYear() === year && today.getMonth() === month;
-
   return (
     <ScrollView
       style={styles.container}
@@ -411,7 +408,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
             <Text style={styles.emptyTitle}>A blank page awaits</Text>
             <Text style={styles.emptyDescription}>
               No journal entries for this day. Make room for a new memory
-              whenever you're ready.
+              whenever you&apos;re ready.
             </Text>
           </View>
         )}
