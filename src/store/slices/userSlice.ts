@@ -17,10 +17,10 @@ const initialState: UserState = {
   isAuthenticated: false,
   isInitialized: false,
   isLoading: false,
-  name: 'Emma',
-  email: 'emma@innerspace.app',
+  name: '',
+  email: '',
   subtitle: 'Tell me about your day today',
-  streakDays: 14,
+  streakDays: 0,
   photoURL: null,
 };
 

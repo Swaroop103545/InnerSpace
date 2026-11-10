@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction, createSelector } from '@reduxjs/toolkit';
 import { JournalEntry, JournalSection, DisplayedJournalSection } from '../../types';
 import { INITIAL_SECTIONS } from '../initialData';
+import { isDemoEntry } from '../../services/journalFirestoreService';
 
 export interface JournalState {
   sections: JournalSection[];
@@ -95,7 +96,8 @@ export const journalSlice = createSlice({
     },
 
     setEntries: (state, action: PayloadAction<JournalEntry[]>) => {
-      const entries = action.payload;
+      const rawEntries = action.payload || [];
+      const entries = rawEntries.filter((e) => !isDemoEntry(e));
       if (entries.length === 0) {
         state.sections = [];
       } else {

@@ -110,14 +110,14 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     }
   };
 
-  const handleResetData = () => {
+  const handleClearData = () => {
     Alert.alert(
-      'Reset Demo Data?',
-      'This will reset all sections and entries to the initial demo entries.',
+      'Clear All Journal Entries?',
+      'This will remove all your entries and reset your journal to a clean slate. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset Data',
+          text: 'Clear All',
           style: 'destructive',
           onPress: onResetData,
         },
@@ -275,6 +275,15 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
             <Text style={styles.weeklyLabel}>THIS WEEK</Text>
           </View>
         </View>
+
+        {entries.length === 0 ? (
+          <View style={styles.emptyAnalyticsNotice}>
+            <Feather name="feather" size={17} color="#7655C9" />
+            <Text style={styles.emptyAnalyticsText}>
+              No reflections recorded yet. Start writing your thoughts to see your weekly journaling habits build up.
+            </Text>
+          </View>
+        ) : null}
 
         <View style={styles.chart}>
           {weeklyActivity.days.map((day, index) => {
@@ -435,11 +444,12 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
         <View style={styles.settingDivider} />
 
         <SettingRow
-          icon="refresh-cw"
-          title="Reset demo data"
-          description="Restore the initial journal entries"
-          iconStyle={styles.orangeIcon}
-          onPress={handleResetData}
+          icon="trash-2"
+          title="Clear all entries"
+          description="Clear all journal reflections for a clean slate"
+          iconStyle={styles.redIcon}
+          danger
+          onPress={handleClearData}
         />
 
         <View style={styles.settingDivider} />
@@ -983,5 +993,22 @@ const styles = StyleSheet.create({
     color: '#B0A8B9',
     textAlign: 'center',
     marginTop: 20,
+  },
+  emptyAnalyticsNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8F5FD',
+    borderWidth: 1,
+    borderColor: '#ECE3FA',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 16,
+    gap: 10,
+  },
+  emptyAnalyticsText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#7655C9',
+    lineHeight: 18,
   },
 });
