@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Animated, Easing, StyleSheet, View } from 'react-native';
 
 export const ART_STAGE_SIZE = 248;
@@ -265,10 +265,10 @@ type StageScaleProps = {
  * Slide 1 visual: scattered white dots morph smoothly into rotating 3D orbital bands.
  */
 export const PlanYourDayArt: React.FC<StageScaleProps> = ({ size }) => {
-  const morphAnim = useRef(new Animated.Value(0)).current;
-  const spinSlow = useRef(new Animated.Value(0)).current;
-  const spinMid = useRef(new Animated.Value(0)).current;
-  const spinFast = useRef(new Animated.Value(0)).current;
+  const [morphAnim] = useState(() => new Animated.Value(0));
+  const [spinSlow] = useState(() => new Animated.Value(0));
+  const [spinMid] = useState(() => new Animated.Value(0));
+  const [spinFast] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const morphLoop = Animated.loop(
@@ -421,10 +421,10 @@ const renderMeshLayer = (
  * Slide 2 visual: layered counter-rotating 3D geodesic / neural wireframe sphere.
  */
 export const BuildFutureArt: React.FC<StageScaleProps> = ({ size }) => {
-  const outerSpin = useRef(new Animated.Value(0)).current;
-  const midSpin = useRef(new Animated.Value(0)).current;
-  const coreSpin = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(0)).current;
+  const [outerSpin] = useState(() => new Animated.Value(0));
+  const [midSpin] = useState(() => new Animated.Value(0));
+  const [coreSpin] = useState(() => new Animated.Value(0));
+  const [pulseAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const oLoop = Animated.loop(
@@ -515,7 +515,7 @@ export const BuildFutureArt: React.FC<StageScaleProps> = ({ size }) => {
 };
 
 const ArcRingView: React.FC<{ spec: ArcRingSpec }> = ({ spec }) => {
-  const spinAnim = useRef(new Animated.Value(0)).current;
+  const [spinAnim] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const loop = Animated.loop(

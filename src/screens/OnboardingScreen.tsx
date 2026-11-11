@@ -66,9 +66,9 @@ const renderSlideArt = (slideId: string, artSize: number) => {
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onDone }) => {
   const { width, height } = useWindowDimensions();
-  const scrollRef = useRef<ScrollView | null>(null);
+  const scrollRef = useRef<React.ComponentRef<typeof ScrollView> | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
-  const contentFade = useRef(new Animated.Value(0)).current;
+  const [contentFade] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     Animated.timing(contentFade, {
