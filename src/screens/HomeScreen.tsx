@@ -37,6 +37,7 @@ import {
   toggleSectionCollapse,
   setSearchQuery,
   setSelectedMoodFilter,
+  setSelectedTagFilter,
   clearFilters,
   resetToInitialData,
   setEntries,
@@ -82,6 +83,7 @@ import {
   storeAllEntriesToFirestore,
 } from '../services/journalFirestoreService';
 import { updateUserProfile } from '../services/authService';
+import { computeJournalingStreaks } from '../utils/entryDates';
 import UsersMapScreen from './UsersMapScreen';
 import CalendarScreen, { CALENDAR_SCREEN_BG } from './CalendarScreen';
 import ProfileScreen from './ProfileScreen';
@@ -162,6 +164,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const userSubtitle = useAppSelector(selectUserSubtitle);
   const userStreakDays = useAppSelector(selectUserStreakDays);
   const stats = useAppSelector(selectJournalStats);
+  const liveStreakDays = React.useMemo(() => {
+    if (allCalendarEntries.length === 0) return userStreakDays;
+    return computeJournalingStreaks(allCalendarEntries).currentStreak;
+  }, [allCalendarEntries, userStreakDays]);
 
   // const entryDate = entry.date ? new Date(entry.date) : new Date(NaN);
 
@@ -336,21 +342,51 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     0
   );
 
+  const handleUpdateProfileDetails = ({
+    name,
+    subtitle,
+  }: {
+    name?: string;
+    subtitle?: string;
+  }) => {
+    const updates: { name?: string; subtitle?: string } = {};
+    if (name !== undefined) updates.name = name;
+    if (subtitle !== undefined) updates.subtitle = subtitle;
+    dispatch(updateProfile(updates));
+    if (userId && userId !== 'demo-local-user') {
+      updateUserProfile(userId, updates).catch((err) =>
+        console.warn('Error updating profile in Firestore:', err)
+      );
+    }
+  };
+
   const renderProfileView = () => (
     <ProfileScreen
+      userId={userId}
       userName={userName}
       userEmail={userEmail}
       userSubtitle={userSubtitle}
-      userStreakDays={userStreakDays}
+      userStreakDays={liveStreakDays}
       stats={stats}
       entries={allCalendarEntries}
       fontsLoaded={fontsLoaded}
-      onEditName={(name) => {
-        dispatch(updateProfile({ name }));
-        if (userId && userId !== 'demo-local-user') {
-          updateUserProfile(userId, { name }).catch((err) =>
-            console.warn('Error updating profile in Firestore:', err)
-          );
+      onEditName={(name) => handleUpdateProfileDetails({ name })}
+      onUpdateProfile={({ name, subtitle }) =>
+        handleUpdateProfileDetails({ name, subtitle })
+      }
+      onSelectTag={(tag) => {
+        animateNext();
+        dispatch(clearFilters());
+        dispatch(setSelectedTagFilter(tag));
+        dispatch(setActiveTab('home'));
+      }}
+      onOpenEntry={(profileEntry) => {
+        if (!profileEntry.id) return;
+        const fullEntry = sections
+          .flatMap((s) => s.data)
+          .find((e) => e.id === profileEntry.id);
+        if (fullEntry) {
+          dispatch(setSelectedEntryDetail(fullEntry));
         }
       }}
       onResetData={() => {
@@ -382,6 +418,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       style={[
         styles.safeArea,
         activeTab === 'calendar' && { backgroundColor: CALENDAR_SCREEN_BG },
+        activeTab === 'profile' && { backgroundColor: '#FAF8FC' },
       ]}
       edges={['top', 'left', 'right']}
     >
@@ -391,6 +428,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
         style={[
           styles.container,
           activeTab === 'calendar' && { backgroundColor: CALENDAR_SCREEN_BG },
+          activeTab === 'profile' && { backgroundColor: '#FAF8FC' },
         ]}
       >
         {/* Render Active View based on activeTab */}
@@ -496,7 +534,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                   </View>
                   <View style={styles.dashboardStreak}>
                     <Feather name="zap" size={15} color="#B7791F" />
-                    <Text style={styles.dashboardStreakValue}>{userStreakDays}</Text>
+                    <Text style={styles.dashboardStreakValue}>{liveStreakDays}</Text>
                     <Text style={styles.dashboardStreakLabel}>DAY STREAK</Text>
                   </View>
                 </View>
@@ -632,6 +670,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                     {hasActiveFilters && (
                       <View style={styles.activeFilterStatusRow}>
                         <Text style={styles.activeFilterStatusText}>
+                          {selectedTagFilter ? `#${selectedTagFilter} · ` : ''}
                           Showing {totalMatchingEntries} {totalMatchingEntries === 1 ? 'match' : 'matches'}
                         </Text>
                         <TouchableOpacity

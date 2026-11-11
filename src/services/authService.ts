@@ -7,7 +7,7 @@ import {
   onAuthStateChanged,
   User,
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
 
 export interface AuthUser {
@@ -199,10 +199,14 @@ export async function updateUserProfile(
 ): Promise<void> {
   try {
     const userDocRef = doc(db, 'users', uid);
-    await updateDoc(userDocRef, {
-      ...updates,
-      updatedAt: Date.now(),
-    });
+    await setDoc(
+      userDocRef,
+      {
+        ...updates,
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    );
 
     if (updates.name && auth.currentUser) {
       await updateFirebaseProfile(auth.currentUser, {
