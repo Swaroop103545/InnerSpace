@@ -81,7 +81,7 @@ import {
   storeAllEntriesToFirestore,
 } from '../services/journalFirestoreService';
 import { updateUserProfile } from '../services/authService';
-import UsersRender from '@/components/users';
+import UsersMapScreen from './UsersMapScreen';
 import CalendarScreen from './CalendarScreen';
 import ProfileScreen from './ProfileScreen';
 
@@ -367,7 +367,11 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       <View style={styles.container}>
         {/* Render Active View based on activeTab */}
         {/* {activeTab === 'users' && renderAnalyticsView()} */}
-        {activeTab === 'users' && <UsersRender />}
+        {activeTab === 'users' && (
+          <UsersMapScreen
+            onOpenEntry={(entry) => dispatch(setSelectedEntryDetail(entry))}
+          />
+        )}
         {activeTab === 'calendar' && (
           <CalendarScreen
             entries={allCalendarEntries}
