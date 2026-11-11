@@ -59,6 +59,7 @@ import {
   selectActiveTab,
   selectIsNewEntryOpen,
   selectEditingEntry,
+  selectNewEntryInitialDate,
   selectSelectedEntryDetail,
   selectIsSearchBarVisible,
 } from '../store/slices/uiSlice';
@@ -82,7 +83,7 @@ import {
 } from '../services/journalFirestoreService';
 import { updateUserProfile } from '../services/authService';
 import UsersMapScreen from './UsersMapScreen';
-import CalendarScreen from './CalendarScreen';
+import CalendarScreen, { CALENDAR_SCREEN_BG } from './CalendarScreen';
 import ProfileScreen from './ProfileScreen';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -114,17 +115,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const activeTab = useAppSelector(selectActiveTab);
   const isNewEntryOpen = useAppSelector(selectIsNewEntryOpen);
   const editingEntry = useAppSelector(selectEditingEntry);
+  const newEntryInitialDateKey = useAppSelector(selectNewEntryInitialDate);
   const selectedEntryDetail = useAppSelector(selectSelectedEntryDetail);
   const sections = useAppSelector((state) => state.journal.sections);
+  const newEntryInitialDate = React.useMemo(() => {
+    if (!newEntryInitialDateKey) return undefined;
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (newEntryInitialDateKey === todayKey) {
+      return now;
+    }
+    const parsed = new Date(`${newEntryInitialDateKey}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [newEntryInitialDateKey]);
   const allCalendarEntries = React.useMemo(() => {
     return sections.flatMap((section) =>
       section.data.map((entry) => ({
         id: entry.id,
         date: entry.date,
         timestamp: entry.timestamp,
+        year: section.year,
         title: entry.title,
+        titleEmoji: entry.titleEmoji,
         body: entry.body,
         mood: entry.mood,
+        weather: entry.weather,
+        tags: entry.tags,
+        isFavorite: entry.isFavorite,
         backgroundColor: entry.backgroundColor,
       }))
     );
@@ -361,10 +378,21 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        activeTab === 'calendar' && { backgroundColor: CALENDAR_SCREEN_BG },
+      ]}
+      edges={['top', 'left', 'right']}
+    >
       <StatusBar style="dark" />
 
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          activeTab === 'calendar' && { backgroundColor: CALENDAR_SCREEN_BG },
+        ]}
+      >
         {/* Render Active View based on activeTab */}
         {/* {activeTab === 'users' && renderAnalyticsView()} */}
         {activeTab === 'users' && (
@@ -382,6 +410,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
               if (fullEntry) {
                 dispatch(setSelectedEntryDetail(fullEntry));
               }
+            }}
+            onAddEntry={(dateKey) => {
+              dispatch(openNewEntryModal(dateKey));
             }}
           />
         )}
@@ -752,14 +783,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
             dispatch(closeNewEntryModal());
           }}
         >
-          <NewEntryScreen
-            entryToEdit={editingEntry}
-            onClose={() => {
-              dispatch(closeNewEntryModal());
-            }}
-            onSave={handleSaveEntry}
-            fontsLoaded={fontsLoaded}
-          />
+          {isNewEntryOpen && (
+            <NewEntryScreen
+              key={editingEntry?.id || newEntryInitialDateKey || 'new-entry'}
+              entryToEdit={editingEntry}
+              initialDate={newEntryInitialDate}
+              onClose={() => {
+                dispatch(closeNewEntryModal());
+              }}
+              onSave={handleSaveEntry}
+              fontsLoaded={fontsLoaded}
+            />
+          )}
         </Modal>
 
         {/* Full Card Detail Modal triggered by clicking/tapping any card */}

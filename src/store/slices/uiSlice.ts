@@ -6,6 +6,7 @@ export interface UIState {
   activeTab: TabType;
   isNewEntryOpen: boolean;
   editingEntry: JournalEntry | null;
+  newEntryInitialDate: string | null;
   selectedEntryDetail: JournalEntry | null;
   isSearchBarVisible: boolean;
 }
@@ -14,6 +15,7 @@ const initialState: UIState = {
   activeTab: 'home',
   isNewEntryOpen: false,
   editingEntry: null,
+  newEntryInitialDate: null,
   selectedEntryDetail: null,
   isSearchBarVisible: false,
 };
@@ -26,19 +28,22 @@ export const uiSlice = createSlice({
       state.activeTab = action.payload;
     },
 
-    openNewEntryModal: (state) => {
+    openNewEntryModal: (state, action: PayloadAction<string | undefined>) => {
       state.editingEntry = null;
+      state.newEntryInitialDate = action.payload || null;
       state.isNewEntryOpen = true;
     },
 
     openEditEntryModal: (state, action: PayloadAction<JournalEntry>) => {
       state.editingEntry = action.payload;
+      state.newEntryInitialDate = null;
       state.isNewEntryOpen = true;
     },
 
     closeNewEntryModal: (state) => {
       state.isNewEntryOpen = false;
       state.editingEntry = null;
+      state.newEntryInitialDate = null;
     },
 
     setSelectedEntryDetail: (state, action: PayloadAction<JournalEntry | null>) => {
@@ -68,6 +73,7 @@ export const {
 export const selectActiveTab = (state: { ui: UIState }) => state.ui.activeTab;
 export const selectIsNewEntryOpen = (state: { ui: UIState }) => state.ui.isNewEntryOpen;
 export const selectEditingEntry = (state: { ui: UIState }) => state.ui.editingEntry;
+export const selectNewEntryInitialDate = (state: { ui: UIState }) => state.ui.newEntryInitialDate;
 export const selectSelectedEntryDetail = (state: { ui: UIState }) => state.ui.selectedEntryDetail;
 export const selectIsSearchBarVisible = (state: { ui: UIState }) => state.ui.isSearchBarVisible;
 
