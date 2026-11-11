@@ -6,6 +6,7 @@ import {
   ActivityIndicator,
   StyleSheet,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -21,6 +22,10 @@ import {
 } from '../store/slices/journalSlice';
 import { HomeScreen } from '../screens/HomeScreen';
 import { LoginScreen, RegisterScreen } from '../screens/AuthScreens';
+import {
+  ONBOARDING_STORAGE_KEY,
+  OnboardingScreen,
+} from '../screens/OnboardingScreen';
 import {
   signInUser,
   registerUser,
@@ -40,8 +45,39 @@ export default function Index() {
   const isAuthenticated = useAppSelector(selectIsAuthenticated);
   const isInitialized = useAppSelector(selectAuthIsInitialized);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [hasCheckedOnboarding, setHasCheckedOnboarding] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
 
   const unsubscribeJournalRef = useRef<(() => void) | null>(null);
+
+  // Check whether the user has completed the onboarding showcase
+  useEffect(() => {
+    let mounted = true;
+    AsyncStorage.getItem(ONBOARDING_STORAGE_KEY)
+      .then((value) => {
+        if (!mounted) return;
+        setShowOnboarding(value !== 'true');
+        setHasCheckedOnboarding(true);
+      })
+      .catch((err) => {
+        console.warn('Failed to read onboarding state:', err);
+        if (mounted) {
+          setShowOnboarding(true);
+          setHasCheckedOnboarding(true);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const handleCompleteOnboarding = () => {
+    setShowOnboarding(false);
+    AsyncStorage.setItem(ONBOARDING_STORAGE_KEY, 'true').catch((err) =>
+      console.warn('Failed to save onboarding state:', err)
+    );
+  };
 
   // Subscribe to Firebase Auth state on mount
   useEffect(() => {
@@ -236,8 +272,8 @@ export default function Index() {
     setAuthMode('login');
   };
 
-  // Initial loading splash screen while Firebase determines auth persistence
-  if (!isInitialized) {
+  // Initial loading splash screen while Firebase & onboarding state initialize
+  if (!isInitialized || !hasCheckedOnboarding) {
     return (
       <View style={styles.loadingContainer}>
         <View style={styles.brandBadge}>
@@ -253,6 +289,10 @@ export default function Index() {
     );
   }
 
+  if (showOnboarding) {
+    return <OnboardingScreen onDone={handleCompleteOnboarding} />;
+  }
+
   if (!isAuthenticated) {
     if (authMode === 'login') {
       return (
@@ -260,6 +300,7 @@ export default function Index() {
           onLogin={handleLogin}
           onForgotPassword={handleForgotPassword}
           onSwitch={() => setAuthMode('register')}
+          onViewIntro={() => setShowOnboarding(true)}
         />
       );
     }
@@ -267,6 +308,7 @@ export default function Index() {
       <RegisterScreen
         onRegister={handleRegister}
         onSwitch={() => setAuthMode('login')}
+        onViewIntro={() => setShowOnboarding(true)}
       />
     );
   }

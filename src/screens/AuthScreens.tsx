@@ -26,6 +26,7 @@ type AuthScreenProps = {
   onLoginSuccess?: () => void;
   onRegisterSuccess?: () => void;
   onSwitch?: () => void;
+  onViewIntro?: () => void;
 };
 
 const COLORS = {
@@ -123,12 +124,14 @@ type AuthShellProps = {
   children: React.ReactNode;
   mode: 'login' | 'register';
   onSwitch: () => void;
+  onViewIntro?: () => void;
 };
 
 const AuthShell: React.FC<AuthShellProps> = ({
   children,
   mode,
   onSwitch,
+  onViewIntro,
 }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -142,16 +145,33 @@ const AuthShell: React.FC<AuthShellProps> = ({
           showsVerticalScrollIndicator={false}
         >
           {/* Brand */}
-          <View style={styles.brandRow}>
-            <View style={styles.brandIcon}>
-              <Ionicons
-                name="book-outline"
-                size={23}
-                color={COLORS.primary}
-              />
+          <View style={styles.brandHeader}>
+            <View style={styles.brandRow}>
+              <View style={styles.brandIcon}>
+                <Ionicons
+                  name="book-outline"
+                  size={23}
+                  color={COLORS.primary}
+                />
+              </View>
+
+              <Text style={styles.brandName}>InnerSpace</Text>
             </View>
 
-            <Text style={styles.brandName}>InnerSpace</Text>
+            {onViewIntro ? (
+              <TouchableOpacity
+                onPress={onViewIntro}
+                activeOpacity={0.75}
+                style={styles.introTourButton}
+              >
+                <Ionicons
+                  name="sparkles-outline"
+                  size={14}
+                  color={COLORS.primary}
+                />
+                <Text style={styles.introTourText}>Intro</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           {/* Decorative journal illustration */}
@@ -251,7 +271,8 @@ export const LoginScreen: React.FC<AuthScreenProps> = ({
   onLogin,
   onForgotPassword,
   onLoginSuccess,
-  onSwitch
+  onSwitch,
+  onViewIntro,
 }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -298,7 +319,11 @@ export const LoginScreen: React.FC<AuthScreenProps> = ({
   };
 
   return (
-    <AuthShell mode="login" onSwitch={onSwitch || (() => {})}>
+    <AuthShell
+      mode="login"
+      onSwitch={onSwitch || (() => {})}
+      onViewIntro={onViewIntro}
+    >
       <View style={styles.form}>
         <AuthInput
           label="Email address"
@@ -403,7 +428,8 @@ export const LoginScreen: React.FC<AuthScreenProps> = ({
 export const RegisterScreen: React.FC<AuthScreenProps> = ({
   onRegister,
   onRegisterSuccess,
-  onSwitch
+  onSwitch,
+  onViewIntro,
 }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -471,7 +497,11 @@ export const RegisterScreen: React.FC<AuthScreenProps> = ({
   };
 
   return (
-    <AuthShell mode="register" onSwitch={onSwitch || (() => {})}>
+    <AuthShell
+      mode="register"
+      onSwitch={onSwitch || (() => {})}
+      onViewIntro={onViewIntro}
+    >
       <View style={styles.form}>
         <AuthInput
           label="Your name"
@@ -613,11 +643,30 @@ const styles = StyleSheet.create({
     paddingTop: 15,
     paddingBottom: 30,
   },
+  brandHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
   brandRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    marginBottom: 10,
+  },
+  introTourButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    borderRadius: 14,
+    backgroundColor: COLORS.primaryLight,
+  },
+  introTourText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.primary,
   },
   brandIcon: {
     width: 39,
