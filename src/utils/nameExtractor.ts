@@ -24,7 +24,7 @@ export interface ScratchedPerson {
 }
 
 // Kinship words and their implied relation
-const KINSHIP_MAP: Record<string, 'Family'> = {
+const KINSHIP_MAP: Record<string, 'Family' | 'Friend'> = {
   mom: 'Family',
   dad: 'Family',
   mother: 'Family',
