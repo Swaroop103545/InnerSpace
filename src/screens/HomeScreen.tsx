@@ -37,6 +37,7 @@ import {
   toggleSectionCollapse,
   setSearchQuery,
   setSelectedMoodFilter,
+  setSelectedTagFilter,
   clearFilters,
   resetToInitialData,
   setEntries,
@@ -59,6 +60,7 @@ import {
   selectActiveTab,
   selectIsNewEntryOpen,
   selectEditingEntry,
+  selectNewEntryInitialDate,
   selectSelectedEntryDetail,
   selectIsSearchBarVisible,
 } from '../store/slices/uiSlice';
@@ -81,8 +83,9 @@ import {
   storeAllEntriesToFirestore,
 } from '../services/journalFirestoreService';
 import { updateUserProfile } from '../services/authService';
+import { computeJournalingStreaks } from '../utils/entryDates';
 import UsersMapScreen from './UsersMapScreen';
-import CalendarScreen from './CalendarScreen';
+import CalendarScreen, { CALENDAR_SCREEN_BG } from './CalendarScreen';
 import ProfileScreen from './ProfileScreen';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -114,17 +117,33 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const activeTab = useAppSelector(selectActiveTab);
   const isNewEntryOpen = useAppSelector(selectIsNewEntryOpen);
   const editingEntry = useAppSelector(selectEditingEntry);
+  const newEntryInitialDateKey = useAppSelector(selectNewEntryInitialDate);
   const selectedEntryDetail = useAppSelector(selectSelectedEntryDetail);
   const sections = useAppSelector((state) => state.journal.sections);
+  const newEntryInitialDate = React.useMemo(() => {
+    if (!newEntryInitialDateKey) return undefined;
+    const now = new Date();
+    const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (newEntryInitialDateKey === todayKey) {
+      return now;
+    }
+    const parsed = new Date(`${newEntryInitialDateKey}T12:00:00`);
+    return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+  }, [newEntryInitialDateKey]);
   const allCalendarEntries = React.useMemo(() => {
     return sections.flatMap((section) =>
       section.data.map((entry) => ({
         id: entry.id,
         date: entry.date,
         timestamp: entry.timestamp,
+        year: section.year,
         title: entry.title,
+        titleEmoji: entry.titleEmoji,
         body: entry.body,
         mood: entry.mood,
+        weather: entry.weather,
+        tags: entry.tags,
+        isFavorite: entry.isFavorite,
         backgroundColor: entry.backgroundColor,
       }))
     );
@@ -145,6 +164,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const userSubtitle = useAppSelector(selectUserSubtitle);
   const userStreakDays = useAppSelector(selectUserStreakDays);
   const stats = useAppSelector(selectJournalStats);
+  const liveStreakDays = React.useMemo(() => {
+    if (allCalendarEntries.length === 0) return userStreakDays;
+    return computeJournalingStreaks(allCalendarEntries).currentStreak;
+  }, [allCalendarEntries, userStreakDays]);
 
   // const entryDate = entry.date ? new Date(entry.date) : new Date(NaN);
 
@@ -319,21 +342,51 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     0
   );
 
+  const handleUpdateProfileDetails = ({
+    name,
+    subtitle,
+  }: {
+    name?: string;
+    subtitle?: string;
+  }) => {
+    const updates: { name?: string; subtitle?: string } = {};
+    if (name !== undefined) updates.name = name;
+    if (subtitle !== undefined) updates.subtitle = subtitle;
+    dispatch(updateProfile(updates));
+    if (userId && userId !== 'demo-local-user') {
+      updateUserProfile(userId, updates).catch((err) =>
+        console.warn('Error updating profile in Firestore:', err)
+      );
+    }
+  };
+
   const renderProfileView = () => (
     <ProfileScreen
+      userId={userId}
       userName={userName}
       userEmail={userEmail}
       userSubtitle={userSubtitle}
-      userStreakDays={userStreakDays}
+      userStreakDays={liveStreakDays}
       stats={stats}
       entries={allCalendarEntries}
       fontsLoaded={fontsLoaded}
-      onEditName={(name) => {
-        dispatch(updateProfile({ name }));
-        if (userId && userId !== 'demo-local-user') {
-          updateUserProfile(userId, { name }).catch((err) =>
-            console.warn('Error updating profile in Firestore:', err)
-          );
+      onEditName={(name) => handleUpdateProfileDetails({ name })}
+      onUpdateProfile={({ name, subtitle }) =>
+        handleUpdateProfileDetails({ name, subtitle })
+      }
+      onSelectTag={(tag) => {
+        animateNext();
+        dispatch(clearFilters());
+        dispatch(setSelectedTagFilter(tag));
+        dispatch(setActiveTab('home'));
+      }}
+      onOpenEntry={(profileEntry) => {
+        if (!profileEntry.id) return;
+        const fullEntry = sections
+          .flatMap((s) => s.data)
+          .find((e) => e.id === profileEntry.id);
+        if (fullEntry) {
+          dispatch(setSelectedEntryDetail(fullEntry));
         }
       }}
       onResetData={() => {
@@ -361,10 +414,23 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        activeTab === 'calendar' && { backgroundColor: CALENDAR_SCREEN_BG },
+        activeTab === 'profile' && { backgroundColor: '#FAF8FC' },
+      ]}
+      edges={['top', 'left', 'right']}
+    >
       <StatusBar style="dark" />
 
-      <View style={styles.container}>
+      <View
+        style={[
+          styles.container,
+          activeTab === 'calendar' && { backgroundColor: CALENDAR_SCREEN_BG },
+          activeTab === 'profile' && { backgroundColor: '#FAF8FC' },
+        ]}
+      >
         {/* Render Active View based on activeTab */}
         {/* {activeTab === 'users' && renderAnalyticsView()} */}
         {activeTab === 'users' && (
@@ -382,6 +448,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
               if (fullEntry) {
                 dispatch(setSelectedEntryDetail(fullEntry));
               }
+            }}
+            onAddEntry={(dateKey) => {
+              dispatch(openNewEntryModal(dateKey));
             }}
           />
         )}
@@ -465,7 +534,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                   </View>
                   <View style={styles.dashboardStreak}>
                     <Feather name="zap" size={15} color="#B7791F" />
-                    <Text style={styles.dashboardStreakValue}>{userStreakDays}</Text>
+                    <Text style={styles.dashboardStreakValue}>{liveStreakDays}</Text>
                     <Text style={styles.dashboardStreakLabel}>DAY STREAK</Text>
                   </View>
                 </View>
@@ -601,6 +670,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
                     {hasActiveFilters && (
                       <View style={styles.activeFilterStatusRow}>
                         <Text style={styles.activeFilterStatusText}>
+                          {selectedTagFilter ? `#${selectedTagFilter} · ` : ''}
                           Showing {totalMatchingEntries} {totalMatchingEntries === 1 ? 'match' : 'matches'}
                         </Text>
                         <TouchableOpacity
@@ -752,14 +822,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
             dispatch(closeNewEntryModal());
           }}
         >
-          <NewEntryScreen
-            entryToEdit={editingEntry}
-            onClose={() => {
-              dispatch(closeNewEntryModal());
-            }}
-            onSave={handleSaveEntry}
-            fontsLoaded={fontsLoaded}
-          />
+          {isNewEntryOpen && (
+            <NewEntryScreen
+              key={editingEntry?.id || newEntryInitialDateKey || 'new-entry'}
+              entryToEdit={editingEntry}
+              initialDate={newEntryInitialDate}
+              onClose={() => {
+                dispatch(closeNewEntryModal());
+              }}
+              onSave={handleSaveEntry}
+              fontsLoaded={fontsLoaded}
+            />
+          )}
         </Modal>
 
         {/* Full Card Detail Modal triggered by clicking/tapping any card */}
