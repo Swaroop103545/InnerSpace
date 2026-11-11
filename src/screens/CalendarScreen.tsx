@@ -1,4 +1,3 @@
-
 import React, { useMemo, useState } from 'react';
 import {
   View,
@@ -9,13 +8,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-type CalendarJournalEntry = {
+export type CalendarJournalEntry = {
   id: string;
   date: string;
   timestamp?: string | number;
+  year?: string | number;
   title: string;
+  titleEmoji?: string;
   body?: string;
   mood?: string;
+  weather?: string;
+  tags?: string[];
+  isFavorite?: boolean;
   backgroundColor?: string;
 };
 
@@ -24,6 +28,8 @@ type CalendarScreenProps = {
   onOpenEntry?: (entry: CalendarJournalEntry) => void;
   onAddEntry?: (dateKey?: string) => void;
 };
+
+export const CALENDAR_SCREEN_BG = '#E6ECF8';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -39,40 +45,185 @@ const MOOD_EMOJIS: Record<string, string> = {
   melancholy: '🌧️',
 };
 
-const getDateKey = (date: Date) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${year}-${month}-${day}`;
+const WEATHER_EMOJIS: Record<string, string> = {
+  sunny: '☀️',
+  'partly-cloudy': '⛅',
+  cloudy: '☁️',
+  rainy: '🌧️',
+  stormy: '⛈️',
+  snowy: '❄️',
+  windy: '💨',
 };
 
-const getEntryDateKey = (date: string) => {
-  // Journal dates are expected to use YYYY-MM-DD.
-  if (/^\d{4}-\d{2}-\d{2}/.test(date)) {
-    return date.substring(0, 10);
+const MONTH_INDEX_MAP: Record<string, number> = {
+  JAN: 0,
+  JANUARY: 0,
+  FEB: 1,
+  FEBRUARY: 1,
+  MAR: 2,
+  MARCH: 2,
+  APR: 3,
+  APRIL: 3,
+  MAY: 4,
+  JUN: 5,
+  JUNE: 5,
+  JUL: 6,
+  JULY: 6,
+  AUG: 7,
+  AUGUST: 7,
+  SEP: 8,
+  SEPT: 8,
+  SEPTEMBER: 8,
+  OCT: 9,
+  OCTOBER: 9,
+  NOV: 10,
+  NOVEMBER: 10,
+  DEC: 11,
+  DECEMBER: 11,
+};
+
+const DAILY_HEADERS = new Set([
+  '[[daily_journal]]',
+  "today’s highlight",
+  "today's highlight",
+  'grateful for',
+  "today’s challenge",
+  "today's challenge",
+  "tomorrow’s intention",
+  "tomorrow's intention",
+]);
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+const getDateKey = (date: Date) => {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
+};
+
+const parseTimestamp = (timestamp?: string | number): Date | null => {
+  if (timestamp === undefined || timestamp === null || timestamp === '') {
+    return null;
   }
 
-  const parsed = new Date(date);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return '';
+  let parsed: Date;
+  if (typeof timestamp === 'number') {
+    parsed = new Date(timestamp);
+  } else if (/^\d+$/.test(timestamp.trim())) {
+    parsed = new Date(Number(timestamp.trim()));
+  } else {
+    parsed = new Date(timestamp);
   }
 
-  return getDateKey(parsed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+/**
+ * Resolves a journal entry to its local YYYY-MM-DD calendar date key.
+ * Handles ISO dates, timestamps (number or string), and formatted headers like "WEDNESDAY, NOV 11".
+ */
+const getEntryDateKey = (
+  entry: Pick<CalendarJournalEntry, 'date' | 'timestamp' | 'year'>
+): string => {
+  const rawDate = (entry.date || '').trim();
+
+  // 1. Explicit YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD
+  const isoMatch = rawDate.match(/\b(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
+  if (isoMatch) {
+    const y = Number(isoMatch[1]);
+    const m = Number(isoMatch[2]);
+    const d = Number(isoMatch[3]);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      return `${y}-${pad2(m)}-${pad2(d)}`;
+    }
+  }
+
+  const tsDate = parseTimestamp(entry.timestamp);
+  const explicitYearMatch = rawDate.match(/\b(19|20)\d{2}\b/);
+  const fallbackYear = explicitYearMatch
+    ? Number(explicitYearMatch[0])
+    : entry.year
+      ? Number(entry.year)
+      : tsDate
+        ? tsDate.getFullYear()
+        : new Date().getFullYear();
+
+  // 2. Formatted dates like "WEDNESDAY, NOV 11" or "Nov 2, 2026"
+  if (rawDate) {
+    const monthDayMatch = rawDate.match(
+      /(?:^|[\s,])(JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUNE?|JULY?|AUG(?:UST)?|SEPT?(?:EMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\.?\s+(\d{1,2})(?:st|nd|rd|th)?\b/i
+    );
+    if (monthDayMatch) {
+      const monthIdx = MONTH_INDEX_MAP[monthDayMatch[1].toUpperCase()];
+      const dayNum = Number(monthDayMatch[2]);
+      if (monthIdx !== undefined && dayNum >= 1 && dayNum <= 31) {
+        return `${fallbackYear}-${pad2(monthIdx + 1)}-${pad2(dayNum)}`;
+      }
+    }
+
+    const dayMonthMatch = rawDate.match(
+      /\b(\d{1,2})(?:st|nd|rd|th)?\s+(JAN(?:UARY)?|FEB(?:RUARY)?|MAR(?:CH)?|APR(?:IL)?|MAY|JUNE?|JULY?|AUG(?:UST)?|SEPT?(?:EMBER)?|OCT(?:OBER)?|NOV(?:EMBER)?|DEC(?:EMBER)?)\.?\b/i
+    );
+    if (dayMonthMatch) {
+      const dayNum = Number(dayMonthMatch[1]);
+      const monthIdx = MONTH_INDEX_MAP[dayMonthMatch[2].toUpperCase()];
+      if (monthIdx !== undefined && dayNum >= 1 && dayNum <= 31) {
+        return `${fallbackYear}-${pad2(monthIdx + 1)}-${pad2(dayNum)}`;
+      }
+    }
+
+    // 3. Standard date strings with an explicit year
+    if (explicitYearMatch) {
+      const parsed = new Date(rawDate);
+      if (!Number.isNaN(parsed.getTime())) {
+        return getDateKey(parsed);
+      }
+    }
+  }
+
+  // 4. Timestamp fallback
+  if (tsDate) {
+    return getDateKey(tsDate);
+  }
+
+  return '';
 };
 
 const formatEntryTime = (timestamp?: string | number) => {
-  if (!timestamp) return '';
-
-  const date = new Date(timestamp);
-
-  if (Number.isNaN(date.getTime())) return '';
+  const date = parseTimestamp(timestamp);
+  if (!date) return '';
 
   return date.toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
   });
+};
+
+const cleanEntryPreview = (body?: string) => {
+  if (!body) return '';
+
+  if (!body.includes('[[DAILY_JOURNAL]]')) {
+    return body.replace(/\s+/g, ' ').trim();
+  }
+
+  const lines = body
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !DAILY_HEADERS.has(line.toLowerCase()));
+
+  return lines.join(' · ');
+};
+
+const resolveAccentColor = (bg?: string) => {
+  if (!bg) return '#7E6BC4';
+  const normalized = bg.trim().toUpperCase();
+  if (
+    normalized === '#FFFFFF' ||
+    normalized === '#FAFAFA' ||
+    normalized === '#FAF7FB' ||
+    normalized === '#F8F6F0'
+  ) {
+    return '#7E6BC4';
+  }
+  return bg;
 };
 
 const CalendarScreen: React.FC<CalendarScreenProps> = ({
@@ -81,12 +232,12 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
   onAddEntry,
 }) => {
   const today = new Date();
+  const todayKey = getDateKey(today);
 
   const [visibleMonth, setVisibleMonth] = useState(
-    new Date(today.getFullYear(), today.getMonth(), 1),
+    new Date(today.getFullYear(), today.getMonth(), 1)
   );
-
-  const [selectedDate, setSelectedDate] = useState(getDateKey(today));
+  const [selectedDate, setSelectedDate] = useState(todayKey);
 
   const year = visibleMonth.getFullYear();
   const month = visibleMonth.getMonth();
@@ -96,22 +247,34 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
     year: 'numeric',
   });
 
-  const entriesByDate = useMemo(() => {
+  // Group all entries by YYYY-MM-DD and sort newest first within each day
+  const { entriesByDate, latestEntryDateKey } = useMemo(() => {
     const grouped: Record<string, CalendarJournalEntry[]> = {};
+    let latestKey = '';
 
     entries.forEach((entry) => {
-      const key = getEntryDateKey(entry.date);
-
+      const key = getEntryDateKey(entry);
       if (!key) return;
 
       if (!grouped[key]) {
         grouped[key] = [];
       }
-
       grouped[key].push(entry);
+
+      if (!latestKey || key > latestKey) {
+        latestKey = key;
+      }
     });
 
-    return grouped;
+    Object.keys(grouped).forEach((key) => {
+      grouped[key].sort((a, b) => {
+        const tsA = parseTimestamp(a.timestamp)?.getTime() || 0;
+        const tsB = parseTimestamp(b.timestamp)?.getTime() || 0;
+        return tsB - tsA;
+      });
+    });
+
+    return { entriesByDate: grouped, latestEntryDateKey: latestKey };
   }, [entries]);
 
   const calendarDays = useMemo(() => {
@@ -140,24 +303,50 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
 
   const selectedEntries = entriesByDate[selectedDate] || [];
 
-  const monthEntriesCount = useMemo(() => {
-    return entries.filter((entry) => {
-      const key = getEntryDateKey(entry.date);
-      return key.startsWith(
-        `${year}-${String(month + 1).padStart(2, '0')}`,
-      );
-    }).length;
-  }, [entries, year, month]);
+  const { monthEntriesCount, monthActiveDaysCount } = useMemo(() => {
+    const monthPrefix = `${year}-${pad2(month + 1)}`;
+    let count = 0;
+    let activeDays = 0;
+
+    Object.entries(entriesByDate).forEach(([key, dayEntries]) => {
+      if (key.startsWith(monthPrefix) && dayEntries.length > 0) {
+        count += dayEntries.length;
+        activeDays += 1;
+      }
+    });
+
+    return { monthEntriesCount: count, monthActiveDaysCount: activeDays };
+  }, [entriesByDate, year, month]);
 
   const changeMonth = (direction: number) => {
     const nextMonth = new Date(year, month + direction, 1);
+    const nextMonthPrefix = `${nextMonth.getFullYear()}-${pad2(nextMonth.getMonth() + 1)}`;
+
     setVisibleMonth(nextMonth);
-    setSelectedDate(getDateKey(nextMonth));
+
+    // If next month contains today, select today; otherwise pick first day in month with an entry or the 1st
+    if (todayKey.startsWith(nextMonthPrefix)) {
+      setSelectedDate(todayKey);
+    } else {
+      const firstEntryDay = Object.keys(entriesByDate)
+        .filter((k) => k.startsWith(nextMonthPrefix))
+        .sort()[0];
+      setSelectedDate(firstEntryDay || getDateKey(nextMonth));
+    }
   };
 
   const goToToday = () => {
     setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-    setSelectedDate(getDateKey(today));
+    setSelectedDate(todayKey);
+  };
+
+  const jumpToLatestEntry = () => {
+    if (!latestEntryDateKey) return;
+    const [y, m] = latestEntryDateKey.split('-').map(Number);
+    if (!Number.isNaN(y) && !Number.isNaN(m)) {
+      setVisibleMonth(new Date(y, m - 1, 1));
+      setSelectedDate(latestEntryDateKey);
+    }
   };
 
   return (
@@ -181,7 +370,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
           onPress={goToToday}
           activeOpacity={0.8}
         >
-          <Ionicons name="today-outline" size={16} color="#6652A3" />
+          <Ionicons name="today-outline" size={16} color="#5648A2" />
           <Text style={styles.todayButtonText}>Today</Text>
         </TouchableOpacity>
       </View>
@@ -189,7 +378,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
       {/* Monthly Summary */}
       <View style={styles.summaryCard}>
         <View style={styles.summaryIcon}>
-          <Ionicons name="book-outline" size={21} color="#725CB2" />
+          <Ionicons name="book-outline" size={21} color="#5648A2" />
         </View>
 
         <View style={styles.summaryContent}>
@@ -197,12 +386,25 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
           <Text style={styles.summaryValue}>
             {monthEntriesCount === 0
               ? 'No memories recorded this month'
-              : `${monthEntriesCount} ${monthEntriesCount === 1 ? 'memory' : 'memories'} recorded`}
+              : `${monthEntriesCount} ${monthEntriesCount === 1 ? 'memory' : 'memories'} across ${monthActiveDaysCount} ${monthActiveDaysCount === 1 ? 'day' : 'days'}`}
           </Text>
+
+          {monthEntriesCount === 0 && latestEntryDateKey ? (
+            <TouchableOpacity
+              style={styles.jumpLatestBtn}
+              onPress={jumpToLatestEntry}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.jumpLatestText}>
+                Jump to latest entry ({latestEntryDateKey})
+              </Text>
+              <Ionicons name="arrow-forward" size={12} color="#5648A2" />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.summaryDecoration}>
-          <Ionicons name="sparkles-outline" size={24} color="#B7A8DC" />
+          <Ionicons name="sparkles-outline" size={22} color="#8D9AD0" />
         </View>
       </View>
 
@@ -223,11 +425,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
               onPress={() => changeMonth(-1)}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name="chevron-back"
-                size={19}
-                color="#5E5670"
-              />
+              <Ionicons name="chevron-back" size={19} color="#4A5173" />
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -235,11 +433,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
               onPress={() => changeMonth(1)}
               activeOpacity={0.7}
             >
-              <Ionicons
-                name="chevron-forward"
-                size={19}
-                color="#5E5670"
-              />
+              <Ionicons name="chevron-forward" size={19} color="#4A5173" />
             </TouchableOpacity>
           </View>
         </View>
@@ -260,9 +454,10 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
               return <View key={`empty-${index}`} style={styles.dayCell} />;
             }
 
-            const hasEntries = Boolean(entriesByDate[item.key]?.length);
+            const dayEntries = entriesByDate[item.key] || [];
+            const hasEntries = dayEntries.length > 0;
             const isSelected = selectedDate === item.key;
-            const isToday = getDateKey(today) === item.key;
+            const isToday = todayKey === item.key;
 
             return (
               <TouchableOpacity
@@ -274,15 +469,17 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
                 <View
                   style={[
                     styles.dayNumberContainer,
-                    isSelected && styles.selectedDay,
+                    hasEntries && !isSelected && !isToday && styles.hasEntryDay,
                     isToday && !isSelected && styles.todayDay,
+                    isSelected && styles.selectedDay,
                   ]}
                 >
                   <Text
                     style={[
                       styles.dayNumber,
-                      isSelected && styles.selectedDayText,
+                      hasEntries && !isSelected && !isToday && styles.hasEntryDayText,
                       isToday && !isSelected && styles.todayDayText,
+                      isSelected && styles.selectedDayText,
                     ]}
                   >
                     {item.day}
@@ -290,14 +487,16 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
                 </View>
 
                 <View style={styles.dayIndicator}>
-                  {hasEntries && (
-                    <View
-                      style={[
-                        styles.entryDot,
-                        isSelected && styles.selectedEntryDot,
-                      ]}
-                    />
-                  )}
+                  {hasEntries &&
+                    dayEntries.slice(0, 3).map((e, dotIdx) => (
+                      <View
+                        key={`${item.key}-dot-${e.id || dotIdx}`}
+                        style={[
+                          styles.entryDot,
+                          isSelected && styles.selectedEntryDot,
+                        ]}
+                      />
+                    ))}
                 </View>
               </TouchableOpacity>
             );
@@ -326,7 +525,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
       {/* Selected Date Entries */}
       <View style={styles.entriesSection}>
         <View style={styles.entriesHeader}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.entriesEyebrow}>YOUR MEMORIES</Text>
             <Text style={styles.entriesTitle}>
               {new Date(`${selectedDate}T12:00:00`).toLocaleDateString(
@@ -335,77 +534,119 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
                   weekday: 'long',
                   month: 'long',
                   day: 'numeric',
-                },
+                }
               )}
             </Text>
           </View>
 
-          <View style={styles.entryCountBadge}>
-            <Text style={styles.entryCountText}>
-              {selectedEntries.length}
-            </Text>
+          <View style={styles.entriesHeaderActions}>
+            {onAddEntry ? (
+              <TouchableOpacity
+                style={styles.quickAddBtn}
+                onPress={() => onAddEntry(selectedDate)}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="add" size={15} color="#5648A2" />
+                <Text style={styles.quickAddText}>Write</Text>
+              </TouchableOpacity>
+            ) : null}
+
+            <View style={styles.entryCountBadge}>
+              <Text style={styles.entryCountText}>
+                {selectedEntries.length}
+              </Text>
+            </View>
           </View>
         </View>
 
         {selectedEntries.length > 0 ? (
           <View style={styles.entryList}>
-            {selectedEntries.map((entry) => (
-              <TouchableOpacity
-                key={entry.id}
-                style={styles.entryCard}
-                activeOpacity={0.8}
-                onPress={() => onOpenEntry?.(entry)}
-                disabled={!onOpenEntry}
-              >
-                <View style={styles.entryAccent} />
+            {selectedEntries.map((entry) => {
+              const previewText = cleanEntryPreview(entry.body);
+              const accentColor = resolveAccentColor(entry.backgroundColor);
+              const moodEmoji = entry.mood
+                ? MOOD_EMOJIS[entry.mood.toLowerCase()] || ''
+                : '';
+              const weatherEmoji = entry.weather
+                ? WEATHER_EMOJIS[entry.weather.toLowerCase()] || ''
+                : '';
 
-                <View style={styles.entryCardContent}>
-                  <View style={styles.entryTopRow}>
-                    <Text style={styles.entryTime}>
-                      {formatEntryTime(entry.timestamp) || 'Journal entry'}
+              return (
+                <TouchableOpacity
+                  key={entry.id}
+                  style={styles.entryCard}
+                  activeOpacity={0.8}
+                  onPress={() => onOpenEntry?.(entry)}
+                  disabled={!onOpenEntry}
+                >
+                  <View
+                    style={[
+                      styles.entryAccent,
+                      { backgroundColor: accentColor },
+                    ]}
+                  />
+
+                  <View style={styles.entryCardContent}>
+                    <View style={styles.entryTopRow}>
+                      <Text style={styles.entryTime}>
+                        {formatEntryTime(entry.timestamp) || entry.date || 'Journal entry'}
+                      </Text>
+
+                      <View style={styles.entryMetaRow}>
+                        {moodEmoji ? (
+                          <Text style={styles.entryMood}>{moodEmoji}</Text>
+                        ) : null}
+                        {weatherEmoji ? (
+                          <Text style={styles.entryMood}>{weatherEmoji}</Text>
+                        ) : null}
+                        {entry.isFavorite ? (
+                          <Ionicons name="star" size={14} color="#D49B38" />
+                        ) : null}
+                      </View>
+                    </View>
+
+                    <Text style={styles.entryTitle} numberOfLines={2}>
+                      {entry.titleEmoji &&
+                      !entry.title?.startsWith(entry.titleEmoji)
+                        ? `${entry.titleEmoji} ${entry.title || 'Untitled memory'}`
+                        : entry.title || 'Untitled memory'}
                     </Text>
 
-                    {entry.mood ? (
-                      <Text style={styles.entryMood}>
-                        {MOOD_EMOJIS[entry.mood.toLowerCase()] || '✨'}
+                    {previewText ? (
+                      <Text style={styles.entryPreview} numberOfLines={2}>
+                        {previewText}
                       </Text>
                     ) : null}
+
+                    {Array.isArray(entry.tags) && entry.tags.length > 0 ? (
+                      <View style={styles.tagsRow}>
+                        {entry.tags.slice(0, 3).map((tag) => (
+                          <View key={tag} style={styles.tagPill}>
+                            <Text style={styles.tagText}>#{tag}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+
+                    {onOpenEntry ? (
+                      <View style={styles.openEntryRow}>
+                        <Text style={styles.openEntryText}>Open memory</Text>
+                        <Ionicons
+                          name="arrow-forward"
+                          size={14}
+                          color="#5648A2"
+                        />
+                      </View>
+                    ) : null}
                   </View>
-
-                  <Text style={styles.entryTitle} numberOfLines={2}>
-                    {entry.title || 'Untitled memory'}
-                  </Text>
-
-                  {entry.body ? (
-                    <Text style={styles.entryPreview} numberOfLines={2}>
-                      {entry.body}
-                    </Text>
-                  ) : null}
-
-                  {onOpenEntry ? (
-                    <View style={styles.openEntryRow}>
-                      <Text style={styles.openEntryText}>
-                        Open memory
-                      </Text>
-                      <Ionicons
-                        name="arrow-forward"
-                        size={14}
-                        color="#7864B5"
-                      />
-                    </View>
-                  ) : null}
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         ) : (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Ionicons
-                name="leaf-outline"
-                size={27}
-                color="#9585BD"
-              />
+              <Ionicons name="leaf-outline" size={27} color="#6652B8" />
             </View>
 
             <Text style={styles.emptyTitle}>A blank page awaits</Text>
@@ -430,7 +671,7 @@ const CalendarScreen: React.FC<CalendarScreenProps> = ({
 
       {/* Footer */}
       <View style={styles.footer}>
-        <Ionicons name="sparkles-outline" size={15} color="#A69ABF" />
+        <Ionicons name="sparkles-outline" size={15} color="#6E789C" />
         <Text style={styles.footerText}>
           Your story, one day at a time.
         </Text>
@@ -444,12 +685,12 @@ export default CalendarScreen;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F7F6FA',
+    backgroundColor: CALENDAR_SCREEN_BG,
   },
   content: {
     paddingHorizontal: 20,
     paddingTop: 22,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   header: {
     flexDirection: 'row',
@@ -458,20 +699,20 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   eyebrow: {
-    color: '#9388A8',
+    color: '#687194',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 2,
     marginBottom: 7,
   },
   title: {
-    color: '#29243A',
+    color: '#1F243D',
     fontSize: 30,
     fontWeight: '700',
     letterSpacing: -0.8,
   },
   subtitle: {
-    color: '#898394',
+    color: '#5F6682',
     fontSize: 12,
     marginTop: 6,
   },
@@ -479,23 +720,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#EEEAF7',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 13,
     paddingVertical: 10,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#D3DCF0',
   },
   todayButtonText: {
-    color: '#6652A3',
+    color: '#5648A2',
     fontSize: 12,
     fontWeight: '700',
   },
   summaryCard: {
-    backgroundColor: '#EEEBF7',
+    backgroundColor: '#D9E2F5',
     borderRadius: 18,
     padding: 17,
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#CBD6EE',
   },
   summaryIcon: {
     width: 43,
@@ -513,13 +758,25 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1.5,
-    color: '#9285B0',
+    color: '#5E678C',
     marginBottom: 5,
   },
   summaryValue: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#403653',
+    color: '#232845',
+  },
+  jumpLatestBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    alignSelf: 'flex-start',
+  },
+  jumpLatestText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5648A2',
   },
   summaryDecoration: {
     width: 35,
@@ -530,7 +787,12 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     padding: 17,
     borderWidth: 1,
-    borderColor: '#EFEDF3',
+    borderColor: '#D5DFF2',
+    shadowColor: '#1E2A4A',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
   monthHeader: {
     flexDirection: 'row',
@@ -541,11 +803,11 @@ const styles = StyleSheet.create({
   monthTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#302B40',
+    color: '#232845',
   },
   monthCaption: {
     fontSize: 10,
-    color: '#9A94A5',
+    color: '#737B99',
     marginTop: 5,
   },
   monthActions: {
@@ -556,7 +818,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 11,
-    backgroundColor: '#F5F3F8',
+    backgroundColor: '#EEF2FA',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -569,7 +831,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   weekdayText: {
-    color: '#A29BAF',
+    color: '#7C85A6',
     fontSize: 10,
     fontWeight: '700',
   },
@@ -593,37 +855,47 @@ const styles = StyleSheet.create({
   dayNumber: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#514B5E',
+    color: '#3E4460',
+  },
+  hasEntryDay: {
+    backgroundColor: '#EFF2FC',
+  },
+  hasEntryDayText: {
+    color: '#463A8A',
+    fontWeight: '700',
   },
   selectedDay: {
-    backgroundColor: '#7661B3',
+    backgroundColor: '#6652B8',
   },
   selectedDayText: {
     color: '#FFFFFF',
     fontWeight: '700',
   },
   todayDay: {
-    backgroundColor: '#EEEAF7',
+    backgroundColor: '#EAE6FA',
     borderWidth: 1,
-    borderColor: '#D8D0EA',
+    borderColor: '#C8BEEE',
   },
   todayDayText: {
-    color: '#705BAA',
+    color: '#5B48AD',
     fontWeight: '700',
   },
   dayIndicator: {
-    height: 5,
+    height: 6,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 2,
+    marginTop: 2,
   },
   entryDot: {
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: '#A18BCF',
+    backgroundColor: '#7A68C4',
   },
   selectedEntryDot: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#6652B8',
   },
   legend: {
     flexDirection: 'row',
@@ -631,7 +903,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 18,
     borderTopWidth: 1,
-    borderTopColor: '#F1EFF4',
+    borderTopColor: '#ECF0F8',
     paddingTop: 15,
     marginTop: 10,
   },
@@ -644,25 +916,26 @@ const styles = StyleSheet.create({
     width: 9,
     height: 9,
     borderRadius: 3,
-    backgroundColor: '#EEEAF7',
+    backgroundColor: '#EAE6FA',
     borderWidth: 1,
-    borderColor: '#D8D0EA',
+    borderColor: '#C8BEEE',
   },
   legendEntry: {
     width: 5,
     height: 5,
     borderRadius: 3,
-    backgroundColor: '#A18BCF',
+    backgroundColor: '#7A68C4',
   },
   legendSelected: {
     width: 9,
     height: 9,
     borderRadius: 3,
-    backgroundColor: '#7661B3',
+    backgroundColor: '#6652B8',
   },
   legendText: {
-    color: '#928B9D',
+    color: '#737B99',
     fontSize: 9,
+    fontWeight: '600',
   },
   entriesSection: {
     marginTop: 27,
@@ -672,30 +945,52 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 14,
+    gap: 10,
   },
   entriesEyebrow: {
     fontSize: 9,
-    color: '#9A90AD',
+    color: '#687194',
     fontWeight: '700',
     letterSpacing: 1.6,
     marginBottom: 6,
   },
   entriesTitle: {
-    color: '#302B40',
+    color: '#1F243D',
     fontSize: 19,
     fontWeight: '700',
+  },
+  entriesHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quickAddBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#D3DCF0',
+  },
+  quickAddText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5648A2',
   },
   entryCountBadge: {
     minWidth: 30,
     height: 30,
     paddingHorizontal: 8,
     borderRadius: 10,
-    backgroundColor: '#EEEAF7',
+    backgroundColor: '#D9E2F5',
     alignItems: 'center',
     justifyContent: 'center',
   },
   entryCountText: {
-    color: '#705BAA',
+    color: '#463A8A',
     fontSize: 12,
     fontWeight: '700',
   },
@@ -708,11 +1003,16 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#EFEDF3',
+    borderColor: '#D5DFF2',
+    shadowColor: '#1E2A4A',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 5,
+    elevation: 1,
   },
   entryAccent: {
-    width: 4,
-    backgroundColor: '#A18BCF',
+    width: 5,
+    backgroundColor: '#7E6BC4',
   },
   entryCardContent: {
     flex: 1,
@@ -725,24 +1025,46 @@ const styles = StyleSheet.create({
     marginBottom: 7,
   },
   entryTime: {
-    color: '#9A93A5',
+    color: '#737B99',
     fontSize: 10,
     fontWeight: '600',
   },
+  entryMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   entryMood: {
-    fontSize: 16,
+    fontSize: 15,
   },
   entryTitle: {
-    color: '#383247',
+    color: '#232845',
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 21,
   },
   entryPreview: {
-    color: '#918B9B',
-    fontSize: 11,
-    lineHeight: 17,
+    color: '#636B87',
+    fontSize: 12,
+    lineHeight: 18,
     marginTop: 6,
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 9,
+  },
+  tagPill: {
+    backgroundColor: '#EFF3FB',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  tagText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#5648A2',
   },
   openEntryRow: {
     flexDirection: 'row',
@@ -751,8 +1073,8 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   openEntryText: {
-    color: '#7864B5',
-    fontSize: 10,
+    color: '#5648A2',
+    fontSize: 11,
     fontWeight: '700',
   },
   emptyState: {
@@ -762,25 +1084,25 @@ const styles = StyleSheet.create({
     paddingVertical: 30,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#EFEDF3',
+    borderColor: '#D5DFF2',
   },
   emptyIcon: {
     width: 54,
     height: 54,
     borderRadius: 18,
-    backgroundColor: '#F1EEF8',
+    backgroundColor: '#EEF2FA',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 13,
   },
   emptyTitle: {
-    color: '#423B51',
+    color: '#232845',
     fontSize: 15,
     fontWeight: '700',
   },
   emptyDescription: {
-    color: '#9992A2',
-    fontSize: 11,
+    color: '#6B7394',
+    fontSize: 12,
     lineHeight: 18,
     textAlign: 'center',
     marginTop: 7,
@@ -789,12 +1111,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#7864B5',
+    backgroundColor: '#6652B8',
     paddingHorizontal: 18,
     paddingVertical: 10,
     borderRadius: 20,
     marginTop: 16,
-    shadowColor: '#7864B5',
+    shadowColor: '#6652B8',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.2,
     shadowRadius: 4,
@@ -813,7 +1135,7 @@ const styles = StyleSheet.create({
     marginTop: 27,
   },
   footerText: {
-    color: '#A39BAD',
+    color: '#6E789C',
     fontSize: 10,
     fontWeight: '500',
   },
