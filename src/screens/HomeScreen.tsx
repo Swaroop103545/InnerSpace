@@ -66,12 +66,14 @@ import {
 } from '../store/slices/uiSlice';
 import {
   updateProfile,
+  setDeviceInfo,
   logout,
   selectUserId,
   selectUserName,
   selectUserEmail,
   selectUserSubtitle,
   selectUserStreakDays,
+  selectUserDeviceInfo,
 } from '../store/slices/userSlice';
 import {
   addJournalEntry,
@@ -82,7 +84,11 @@ import {
   resetUserEntriesToDemo,
   storeAllEntriesToFirestore,
 } from '../services/journalFirestoreService';
-import { updateUserProfile } from '../services/authService';
+import {
+  updateUserProfile,
+  updateUserDeviceInfo,
+} from '../services/authService';
+import { collectUserDeviceInfo } from '../services/deviceInfoService';
 import { computeJournalingStreaks } from '../utils/entryDates';
 import UsersMapScreen from './UsersMapScreen';
 import CalendarScreen, { CALENDAR_SCREEN_BG } from './CalendarScreen';
@@ -163,6 +169,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
   const userEmail = useAppSelector(selectUserEmail);
   const userSubtitle = useAppSelector(selectUserSubtitle);
   const userStreakDays = useAppSelector(selectUserStreakDays);
+  const deviceInfo = useAppSelector(selectUserDeviceInfo);
   const stats = useAppSelector(selectJournalStats);
   const liveStreakDays = React.useMemo(() => {
     if (allCalendarEntries.length === 0) return userStreakDays;
@@ -360,6 +367,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
     }
   };
 
+  const handleRefreshDeviceInfo = async (requestCellularPermission = false) => {
+    try {
+      const info = await collectUserDeviceInfo({ requestCellularPermission });
+      dispatch(setDeviceInfo(info));
+      if (userId && userId !== 'demo-local-user') {
+        await updateUserDeviceInfo(userId, info).catch((err) =>
+          console.warn('Error syncing device info to Firestore:', err)
+        );
+      }
+    } catch (err) {
+      console.warn('Error refreshing device info:', err);
+    }
+  };
+
   const renderProfileView = () => (
     <ProfileScreen
       userId={userId}
@@ -367,6 +388,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       userEmail={userEmail}
       userSubtitle={userSubtitle}
       userStreakDays={liveStreakDays}
+      deviceInfo={deviceInfo}
       stats={stats}
       entries={allCalendarEntries}
       fontsLoaded={fontsLoaded}
@@ -374,6 +396,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onLogout }) => {
       onUpdateProfile={({ name, subtitle }) =>
         handleUpdateProfileDetails({ name, subtitle })
       }
+      onRefreshDeviceInfo={handleRefreshDeviceInfo}
       onSelectTag={(tag) => {
         animateNext();
         dispatch(clearFilters());

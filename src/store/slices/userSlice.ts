@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
+import { UserDeviceInfo } from '../../types';
 
 export interface UserState {
   uid: string | null;
@@ -10,6 +11,7 @@ export interface UserState {
   subtitle: string;
   streakDays: number;
   photoURL?: string | null;
+  deviceInfo: UserDeviceInfo | null;
 }
 
 const initialState: UserState = {
@@ -22,6 +24,7 @@ const initialState: UserState = {
   subtitle: 'Tell me about your day today',
   streakDays: 0,
   photoURL: null,
+  deviceInfo: null,
 };
 
 export const userSlice = createSlice({
@@ -89,6 +92,7 @@ export const userSlice = createSlice({
         subtitle?: string;
         streakDays?: number;
         photoURL?: string | null;
+        deviceInfo?: UserDeviceInfo | null;
       }>
     ) => {
       state.isAuthenticated = true;
@@ -106,6 +110,13 @@ export const userSlice = createSlice({
       if (action.payload.photoURL !== undefined) {
         state.photoURL = action.payload.photoURL;
       }
+      if (action.payload.deviceInfo !== undefined) {
+        state.deviceInfo = action.payload.deviceInfo;
+      }
+    },
+
+    setDeviceInfo: (state, action: PayloadAction<UserDeviceInfo | null>) => {
+      state.deviceInfo = action.payload;
     },
 
     logout: (state) => {
@@ -113,6 +124,7 @@ export const userSlice = createSlice({
       state.isInitialized = true;
       state.isLoading = false;
       state.uid = null;
+      state.deviceInfo = null;
     },
 
     updateProfile: (
@@ -146,6 +158,7 @@ export const {
   login,
   register,
   setFullUserProfile,
+  setDeviceInfo,
   logout,
   updateProfile,
 } = userSlice.actions;
@@ -163,5 +176,7 @@ export const selectUserSubtitle = (state: { user: UserState }) =>
   state.user.subtitle;
 export const selectUserStreakDays = (state: { user: UserState }) =>
   state.user.streakDays;
+export const selectUserDeviceInfo = (state: { user: UserState }) =>
+  state.user.deviceInfo;
 
 export default userSlice.reducer;

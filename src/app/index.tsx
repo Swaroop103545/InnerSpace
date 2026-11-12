@@ -13,6 +13,7 @@ import {
   selectIsAuthenticated,
   selectAuthIsInitialized,
   setFullUserProfile,
+  setDeviceInfo,
   setAuthInitialized,
   logout,
 } from '../store/slices/userSlice';
@@ -33,12 +34,34 @@ import {
   signOutUser,
   subscribeToAuthState,
   getUserProfile,
+  updateUserDeviceInfo,
+  getCurrentAuthUser,
 } from '../services/authService';
 import {
   subscribeToJournalEntries,
   seedDefaultEntriesIfEmpty,
 } from '../services/journalFirestoreService';
+import { collectUserDeviceInfo } from '../services/deviceInfoService';
 import { isCustomFirebaseConfigured } from '../services/firebase';
+
+function syncSessionDeviceInfo(
+  dispatch: ReturnType<typeof useAppDispatch>,
+  uid: string
+) {
+  collectUserDeviceInfo()
+    .then((deviceInfo) => {
+      if (uid !== 'demo-local-user' && getCurrentAuthUser()?.uid !== uid) {
+        return;
+      }
+      dispatch(setDeviceInfo(deviceInfo));
+      if (uid !== 'demo-local-user') {
+        updateUserDeviceInfo(uid, deviceInfo).catch((err) =>
+          console.warn('Error syncing device info to Firestore:', err)
+        );
+      }
+    })
+    .catch((err) => console.warn('Failed to collect device info:', err));
+}
 
 export default function Index() {
   const dispatch = useAppDispatch();
@@ -108,8 +131,10 @@ export default function Index() {
                 userProfile?.subtitle || 'Tell me about your day today',
               streakDays: userProfile?.streakDays ?? 0,
               photoURL: firebaseUser.photoURL,
+              deviceInfo: userProfile?.deviceInfo ?? null,
             })
           );
+          syncSessionDeviceInfo(dispatch, firebaseUser.uid);
 
           // Listen to user's journal entries in real-time from Firestore
           dispatch(setIsLoadingEntries(true));
@@ -177,6 +202,7 @@ export default function Index() {
                     streakDays: 0,
                   })
                 );
+                syncSessionDeviceInfo(dispatch, 'demo-local-user');
               },
             },
           ]
@@ -225,6 +251,7 @@ export default function Index() {
                     streakDays: 1,
                   })
                 );
+                syncSessionDeviceInfo(dispatch, 'demo-local-user');
               },
             },
           ]

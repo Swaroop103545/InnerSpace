@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
+import { UserDeviceInfo } from '../types';
 
 export interface AuthUser {
   uid: string;
@@ -25,6 +26,8 @@ export interface UserProfileData {
   streakDays: number;
   createdAt: number;
   updatedAt?: number;
+  deviceInfo?: UserDeviceInfo | null;
+  lastDeviceSyncAt?: number;
 }
 
 /**
@@ -216,6 +219,25 @@ export async function updateUserProfile(
   } catch (error: any) {
     throw new Error(formatFirebaseAuthError(error));
   }
+}
+
+/**
+ * Sync the user's latest device & environment snapshot to Firestore users/{uid}
+ */
+export async function updateUserDeviceInfo(
+  uid: string,
+  deviceInfo: UserDeviceInfo
+): Promise<void> {
+  const userDocRef = doc(db, 'users', uid);
+  await setDoc(
+    userDocRef,
+    {
+      deviceInfo,
+      lastDeviceSyncAt: deviceInfo.collectedAt,
+      updatedAt: Date.now(),
+    },
+    { merge: true }
+  );
 }
 
 /**

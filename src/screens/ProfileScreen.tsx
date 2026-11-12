@@ -11,6 +11,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Share,
+  ActivityIndicator,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Feather } from '@expo/vector-icons';
@@ -20,6 +21,11 @@ import {
   getDateKey,
   getEntryDateKey,
 } from '../utils/entryDates';
+import { UserDeviceInfo } from '../types';
+import {
+  formatBytesToGB,
+  formatDeviceSummary,
+} from '../services/deviceInfoService';
 
 export type ProfileJournalEntry = {
   id?: string;
@@ -48,12 +54,16 @@ type ProfileScreenProps = {
   userEmail?: string;
   userSubtitle?: string;
   userStreakDays: number;
+  deviceInfo?: UserDeviceInfo | null;
   stats: ProfileStats;
   entries: ProfileJournalEntry[];
   fontsLoaded?: boolean;
 
   onEditName: (name: string) => void;
   onUpdateProfile?: (updates: { name: string; subtitle: string }) => void;
+  onRefreshDeviceInfo?: (
+    requestCellularPermission?: boolean
+  ) => Promise<void> | void;
   onSelectTag?: (tag: string) => void;
   onOpenEntry?: (entry: ProfileJournalEntry) => void;
   onResetData: () => void;
@@ -83,17 +93,211 @@ const BIO_PRESETS = [
 
 const GOAL_OPTIONS = [3, 5, 7] as const;
 
+type DeviceInfoRow = { label: string; value: string };
+type DeviceInfoSection = {
+  title: string;
+  icon: React.ComponentProps<typeof Feather>['name'];
+  rows: DeviceInfoRow[];
+};
+
+function buildDeviceInfoSections(info: UserDeviceInfo): DeviceInfoSection[] {
+  const modelDisplay =
+    [info.brand, info.modelName].filter(Boolean).join(' ') ||
+    info.modelId ||
+    'Unknown';
+  const osDisplay =
+    [info.osName || info.platform, info.osVersion].filter(Boolean).join(' ') ||
+    'Unknown';
+
+  const deviceRows: DeviceInfoRow[] = [
+    { label: 'Model', value: modelDisplay },
+    { label: 'Manufacturer', value: info.manufacturer || 'Unknown' },
+    { label: 'Device Name', value: info.deviceName || 'Unavailable' },
+    {
+      label: 'Device Type',
+      value: `${info.deviceType} (${info.isPhysicalDevice ? 'Physical' : 'Emulator / Simulator'})`,
+    },
+    { label: 'Operating System', value: osDisplay },
+  ];
+  if (info.platformApiLevel !== null) {
+    deviceRows.push({
+      label: 'Android API Level',
+      value: String(info.platformApiLevel),
+    });
+  }
+  if (info.osBuildId) {
+    deviceRows.push({ label: 'OS Build ID', value: info.osBuildId });
+  }
+  if (info.totalMemoryBytes !== null) {
+    deviceRows.push({
+      label: 'Memory (RAM)',
+      value: formatBytesToGB(info.totalMemoryBytes),
+    });
+  }
+  if (info.supportedCpuArchitectures?.length) {
+    deviceRows.push({
+      label: 'CPU Architecture',
+      value: info.supportedCpuArchitectures.join(', '),
+    });
+  }
+  if (info.deviceYearClass !== null) {
+    deviceRows.push({
+      label: 'Year Class',
+      value: String(info.deviceYearClass),
+    });
+  }
+
+  const localeRows: DeviceInfoRow[] = [
+    {
+      label: 'Language / Locale',
+      value: info.languageTag || info.languageCode || 'Unknown',
+    },
+    { label: 'Region', value: info.regionCode || 'Unavailable' },
+    { label: 'Timezone', value: info.timeZone || 'Unavailable' },
+    {
+      label: 'Clock Format',
+      value:
+        info.uses24HourClock === null
+          ? 'Unavailable'
+          : info.uses24HourClock
+            ? '24-hour'
+            : '12-hour',
+    },
+  ];
+  if (info.currencyCode) {
+    localeRows.push({ label: 'Currency', value: info.currencyCode });
+  }
+  if (info.measurementSystem) {
+    localeRows.push({
+      label: 'Measurement',
+      value: info.temperatureUnit
+        ? `${info.measurementSystem} · ${info.temperatureUnit}`
+        : info.measurementSystem,
+    });
+  }
+  if (info.textDirection) {
+    localeRows.push({
+      label: 'Text Direction',
+      value: info.textDirection.toUpperCase(),
+    });
+  }
+
+  const networkRows: DeviceInfoRow[] = [
+    {
+      label: 'Connection',
+      value:
+        info.isConnected === null
+          ? info.networkType
+          : `${info.networkType} (${info.isConnected ? 'Connected' : 'Offline'})`,
+    },
+    {
+      label: 'Internet Access',
+      value:
+        info.isInternetReachable === null
+          ? 'Unknown'
+          : info.isInternetReachable
+            ? 'Reachable'
+            : 'Not reachable',
+    },
+    { label: 'IP Address', value: info.ipAddress || 'Unavailable' },
+  ];
+  if (info.isAirplaneMode !== null) {
+    networkRows.push({
+      label: 'Airplane Mode',
+      value: info.isAirplaneMode ? 'On' : 'Off',
+    });
+  }
+  networkRows.push(
+    {
+      label: 'Battery',
+      value:
+        info.batteryLevelPercent !== null
+          ? `${info.batteryLevelPercent}% · ${info.batteryState}`
+          : info.batteryState,
+    },
+    {
+      label: 'Low Power Mode',
+      value:
+        info.lowPowerMode === null
+          ? 'Unavailable'
+          : info.lowPowerMode
+            ? 'Enabled'
+            : 'Off',
+    }
+  );
+
+  return [
+    { title: 'Device & OS', icon: 'smartphone', rows: deviceRows },
+    {
+      title: 'Screen & Display',
+      icon: 'maximize-2',
+      rows: [
+        {
+          label: 'Screen Size',
+          value: `${info.screenWidth} × ${info.screenHeight}`,
+        },
+        {
+          label: 'Window Size',
+          value: `${info.windowWidth} × ${info.windowHeight}`,
+        },
+        { label: 'Pixel Ratio', value: `${info.pixelRatio}x` },
+        { label: 'Font Scale', value: `${info.fontScale}x` },
+      ],
+    },
+    { title: 'Locale & Timezone', icon: 'globe', rows: localeRows },
+    { title: 'Network & Power', icon: 'wifi', rows: networkRows },
+    {
+      title: 'Cellular & SIM (GSM)',
+      icon: 'radio',
+      rows: [
+        {
+          label: 'SIM Name / Carrier',
+          value: info.simCarrierName || 'Unavailable',
+        },
+        {
+          label: 'Cellular Generation',
+          value: info.cellularGeneration || 'Unknown',
+        },
+        {
+          label: 'SIM Country (ISO)',
+          value: info.simIsoCountryCode
+            ? info.simIsoCountryCode.toUpperCase()
+            : 'Unavailable',
+        },
+        {
+          label: 'MCC / MNC',
+          value:
+            info.mobileCountryCode || info.mobileNetworkCode
+              ? `${info.mobileCountryCode ?? '--'} / ${info.mobileNetworkCode ?? '--'}`
+              : 'Unavailable',
+        },
+        {
+          label: 'Phone State Permission',
+          value:
+            info.cellularPermissionGranted == null
+              ? 'Not required'
+              : info.cellularPermissionGranted
+                ? 'Granted'
+                : 'Not granted',
+        },
+      ],
+    },
+  ];
+}
+
 const ProfileScreen: React.FC<ProfileScreenProps> = ({
   userId,
   userName,
   userEmail,
   userSubtitle,
   userStreakDays,
+  deviceInfo = null,
   stats,
   entries = [],
   fontsLoaded = false,
   onEditName,
   onUpdateProfile,
+  onRefreshDeviceInfo,
   onSelectTag,
   onOpenEntry,
   onResetData,
@@ -114,6 +318,30 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
 
   // Favorites viewer modal state
   const [isFavoritesModalVisible, setIsFavoritesModalVisible] = useState(false);
+
+  // Device & environment diagnostics modal state
+  const [isDeviceModalVisible, setIsDeviceModalVisible] = useState(false);
+  const [isRefreshingDevice, setIsRefreshingDevice] = useState(false);
+
+  const deviceSections = useMemo(
+    () => (deviceInfo ? buildDeviceInfoSections(deviceInfo) : []),
+    [deviceInfo]
+  );
+
+  const handleRefreshDevice = async (requestCellularPermission = false) => {
+    if (!onRefreshDeviceInfo || isRefreshingDevice) return;
+    setIsRefreshingDevice(true);
+    try {
+      await onRefreshDeviceInfo(requestCellularPermission);
+    } finally {
+      setIsRefreshingDevice(false);
+    }
+  };
+
+  const openDeviceInfoModal = () => {
+    setIsDeviceModalVisible(true);
+    handleRefreshDevice(false);
+  };
 
   const goalStorageKey = `@innerspace_weekly_goal_${userId || 'local'}`;
 
@@ -803,6 +1031,20 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           onPress={handleExportJournal}
         />
 
+        <View style={styles.settingDivider} />
+
+        <SettingRow
+          icon="smartphone"
+          title="Device & environment"
+          description={
+            deviceInfo
+              ? formatDeviceSummary(deviceInfo)
+              : 'Hardware, screen, locale, network & battery details'
+          }
+          iconStyle={styles.purpleIcon}
+          onPress={openDeviceInfoModal}
+        />
+
         {onSyncAllToFirebase ? (
           <>
             <View style={styles.settingDivider} />
@@ -1011,6 +1253,111 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
                     </TouchableOpacity>
                   );
                 })
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* DEVICE & ENVIRONMENT MODAL */}
+      <Modal
+        visible={isDeviceModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsDeviceModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalEyebrow}>DEVICE DIAGNOSTICS</Text>
+                <Text style={styles.modalTitle}>Device & Environment</Text>
+              </View>
+              <View style={styles.deviceModalHeaderActions}>
+                {onRefreshDeviceInfo ? (
+                  <TouchableOpacity
+                    onPress={() => handleRefreshDevice(false)}
+                    style={styles.modalCloseBtn}
+                    disabled={isRefreshingDevice}
+                  >
+                    {isRefreshingDevice ? (
+                      <ActivityIndicator size="small" color="#7655C9" />
+                    ) : (
+                      <Feather name="refresh-cw" size={18} color="#7655C9" />
+                    )}
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  onPress={() => setIsDeviceModalVisible(false)}
+                  style={styles.modalCloseBtn}
+                >
+                  <Feather name="x" size={20} color="#667085" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={{ maxHeight: 440 }}
+            >
+              {!deviceInfo ? (
+                <View style={styles.emptyFavBox}>
+                  <ActivityIndicator size="small" color="#7655C9" />
+                  <Text style={styles.emptyFavTitle}>
+                    Collecting device info...
+                  </Text>
+                  <Text style={styles.emptyFavSub}>
+                    Reading hardware, display, locale, network and battery details.
+                  </Text>
+                </View>
+              ) : (
+                <>
+                  {deviceSections.map((section) => (
+                    <View key={section.title} style={styles.deviceGroupCard}>
+                      <View style={styles.deviceGroupHeader}>
+                        <Feather name={section.icon} size={14} color="#7655C9" />
+                        <Text style={styles.deviceGroupTitle}>
+                          {section.title}
+                        </Text>
+                      </View>
+                      {section.rows.map((row, idx) => (
+                        <View
+                          key={row.label}
+                          style={[
+                            styles.deviceInfoRow,
+                            idx > 0 && styles.deviceInfoRowBorder,
+                          ]}
+                        >
+                          <Text style={styles.deviceInfoLabel}>
+                            {row.label}
+                          </Text>
+                          <Text style={styles.deviceInfoValue} selectable>
+                            {row.value}
+                          </Text>
+                        </View>
+                      ))}
+                      {section.title === 'Cellular & SIM (GSM)' &&
+                      Platform.OS === 'android' &&
+                      deviceInfo.cellularPermissionGranted === false &&
+                      onRefreshDeviceInfo ? (
+                        <TouchableOpacity
+                          style={styles.cellularPermissionBtn}
+                          activeOpacity={0.8}
+                          onPress={() => handleRefreshDevice(true)}
+                          disabled={isRefreshingDevice}
+                        >
+                          <Feather name="shield" size={13} color="#7655C9" />
+                          <Text style={styles.cellularPermissionBtnText}>
+                            Grant Phone State Permission for 4G/5G & SIM
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ))}
+                  <Text style={styles.deviceSyncNote}>
+                    Synced {new Date(deviceInfo.collectedAt).toLocaleString()}
+                  </Text>
+                </>
               )}
             </ScrollView>
           </View>
@@ -1837,5 +2184,78 @@ const styles = StyleSheet.create({
     color: '#736A82',
     marginTop: 4,
     lineHeight: 17,
+  },
+  deviceModalHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  deviceGroupCard: {
+    backgroundColor: '#FAF8FC',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#EFEBF7',
+  },
+  deviceGroupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginBottom: 8,
+  },
+  deviceGroupTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5F4B9B',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  deviceInfoRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingVertical: 6,
+    gap: 12,
+  },
+  deviceInfoRowBorder: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#EAE4F3',
+  },
+  deviceInfoLabel: {
+    fontSize: 12,
+    color: '#7D748D',
+    fontWeight: '500',
+  },
+  deviceInfoValue: {
+    flex: 1,
+    textAlign: 'right',
+    fontSize: 12,
+    color: '#30283E',
+    fontWeight: '600',
+  },
+  deviceSyncNote: {
+    fontSize: 11,
+    color: '#92899F',
+    textAlign: 'center',
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  cellularPermissionBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: '#EFEBF8',
+  },
+  cellularPermissionBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#674CB0',
   },
 });
